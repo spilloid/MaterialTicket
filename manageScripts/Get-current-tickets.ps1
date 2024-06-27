@@ -1,0 +1,1 @@
+Get-CWMTicket -condition 'Resources="jspillers" and closedFlag = false' | format-table
