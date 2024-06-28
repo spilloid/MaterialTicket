@@ -22,7 +22,7 @@ function Get-TicketNoteSummary {
 }
 
 # Get all open tickets for the specified resource
-$openTickets = Get-CWMTicket -condition 'Resources="jspillers" and closedFlag = false'
+$openTickets = Get-CWMTicket -condition 'Resources="jthomas" and closedFlag = false'
 
 # Initialize an array for the summary sheet
 $summarySheet = @()

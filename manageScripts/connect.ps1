@@ -1,20 +1,25 @@
-$CWMConnectionInfo = @{
-    # This is the URL to your manage server.
-    Server      = 'portal.resultant.com'
-    # This is the company entered at login
-    Company     = 'resultant'
-    # Public key created for this integration
-    pubkey      = 'Jtwf9WGnSkv5lhFT'
-    # Private key created for this integration
-    privatekey  = '6Uvpq3krP9dPeQW7'
-    # Your ClientID found at https://developer.connectwise.com/ClientID
-    clientid    = '7cbdcad9-0ad6-4b82-bcd9-31221288c868'
+# Load environment variables from .env file
+Import-Module dotenv
+$envPath = "$PSScriptRoot/.env"
+if (Test-Path $envPath) {
+    dotenv $envPath
+} else {
+    Write-Error "Environment file not found at $envPath"
+    exit 1
 }
-# ^This information is sensitive, take precautions to secure it.^
+
+# Create the connection info using environment variables
+$CWMConnectionInfo = @{
+    Server      = $env:CWM_SERVER
+    Company     = $env:CWM_COMPANY
+    pubkey      = $env:CWM_PUBKEY
+    privatekey  = $env:CWM_PRIVATEKEY
+    clientid    = $env:CWM_CLIENTID
+}
 
 # Install/Update/Load the module
-#if(Get-InstalledModule 'ConnectWiseManageAPI' -ErrorAction SilentlyContinue){ Update-Module 'ConnectWiseManageAPI' -Verbose }
-#else{ Install-Module 'ConnectWiseManageAPI' -Verbose }
+# if(Get-InstalledModule 'ConnectWiseManageAPI' -ErrorAction SilentlyContinue){ Update-Module 'ConnectWiseManageAPI' -Verbose }
+# else{ Install-Module 'ConnectWiseManageAPI' -Verbose }
 Import-Module 'ConnectWiseManageAPI'
 
 # Connect to your Manage server
