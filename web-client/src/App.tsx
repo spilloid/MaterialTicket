@@ -9,6 +9,7 @@ import CWManageView from "./components/CWManageView";
 import TicketDialog from "./components/TicketDialog";
 import { Ticket } from "./interfaces";
 
+// Define Theme for Styling
 const defaultTheme = createTheme({
   palette: {
     primary: { main: "#1976d2" },
@@ -32,7 +33,7 @@ function App() {
   const [filterDialogOpen, setFilterDialogOpen] = useState<boolean>(false);
   const [ticketDialogOpen, setTicketDialogOpen] = useState<boolean>(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-  const [currentView, setCurrentView] = useState<"tickets" | "cwManage">("tickets"); // Updated state to handle multiple views
+  const [currentView, setCurrentView] = useState<"tickets" | "cwManage">("tickets");
 
   const toggleDrawer = () => {
     setDrawerOpen(!drawerOpen);
@@ -64,16 +65,18 @@ function App() {
     setFilterDialogOpen(false);
   };
 
-  // Function to handle ticket click
   const handleTicketClick = (ticket: Ticket) => {
     setSelectedTicket(ticket);
     setTicketDialogOpen(true);
   };
 
-  // Function to close the TicketDialog
   const handleTicketDialogClose = () => {
     setTicketDialogOpen(false);
     setSelectedTicket(null);
+  };
+
+  const shortenSummary = (summary: string) => {
+    return summary.length > 100 ? `${summary.slice(0, 100)}...` : summary;
   };
 
   return (
@@ -84,7 +87,7 @@ function App() {
         <DashboardDrawer
           drawerOpen={drawerOpen}
           toggleDrawer={toggleDrawer}
-          switchToView={(view) => setCurrentView(view)} // Passing a generic switchToView function
+          switchToView={(view) => setCurrentView(view)}
         />
 
         <Box component="main" sx={{ flexGrow: 1, p: 3, backgroundColor: "background.default" }}>
@@ -101,7 +104,11 @@ function App() {
                 <Grid container spacing={3} sx={{ mt: 2 }}>
                   {filteredTickets.map((ticket) => (
                     <Grid item xs={12} sm={6} md={4} key={ticket.ticketnumber}>
-                      <TicketCard ticket={ticket} onClick={() => handleTicketClick(ticket)} />
+                      <TicketCard
+                        ticket={ticket}
+                        onClick={() => handleTicketClick(ticket)}
+                        shortenedSummary={shortenSummary(ticket.ticketSummary)} // Pass shortened summary to TicketCard
+                      />
                     </Grid>
                   ))}
                 </Grid>
@@ -114,7 +121,6 @@ function App() {
           )}
         </Box>
 
-        {/* Filter Dialog */}
         <FilterDialog
           open={filterDialogOpen}
           onClose={() => setFilterDialogOpen(false)}
@@ -122,12 +128,12 @@ function App() {
           applyFilters={applyFilters}
         />
 
-        {/* Ticket Dialog */}
         {selectedTicket && (
           <TicketDialog
             ticket={selectedTicket}
             open={ticketDialogOpen}
             onClose={handleTicketDialogClose}
+            shortenedSummary={shortenSummary(selectedTicket.ticketSummary)} // Pass shortened summary to TicketDialog
           />
         )}
       </Box>

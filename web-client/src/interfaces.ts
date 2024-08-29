@@ -21,9 +21,10 @@ export interface Company {
 
 export interface Ticket {
   ticketnumber: number;
-  ticketSummary: string;
-  priority: string;
   company: Company;
-  technicians: Technician[];
+  ticketSummary: string;
+  ticketTitle: string;  // New field for ticket title
+  technician: Technician | null;
+  priority: string;
   timeEntries: TimeEntry[];
 }
