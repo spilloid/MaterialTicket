@@ -18,6 +18,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import SaveIcon from "@mui/icons-material/Save";
 import UndoIcon from "@mui/icons-material/Undo";
 import { Ticket } from "../interfaces";
+import { ArrowDownward, ArrowUpward } from "@mui/icons-material";
 
 // Map of priority and status colors
 const priorityColors: { [key: string]: string } = {
@@ -43,7 +44,13 @@ interface TicketDialogProps {
   notes: any[];
 }
 
-const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, shortenedSummary, notes }) => {
+const TicketDialog: React.FC<TicketDialogProps> = ({
+  ticket,
+  open,
+  onClose,
+  shortenedSummary,
+  notes,
+}) => {
   if (!ticket) return null;
 
   const priorityColor = priorityColors[ticket.priority] || "#1976d2"; // Default color
@@ -65,6 +72,9 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, shor
 
   // Local state to store updated values during edit
   const [editableFields, setEditableFields] = useState(initialFields);
+
+  // Sorting state for notes
+  const [sortAscending, setSortAscending] = useState(true);
 
   // Update the initial fields whenever the dialog is opened
   useEffect(() => {
@@ -96,10 +106,26 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, shor
     setIsEditing((prev) => ({ ...prev, [field]: false }));
   };
 
+  // Toggle sorting between ascending and descending
+  const toggleSort = () => setSortAscending(!sortAscending);
+
+  // Sort the notes by date
+  const sortedNotes = [...notes].sort((a, b) => {
+    const dateA = new Date(a.dateCreated).getTime();
+    const dateB = new Date(b.dateCreated).getTime();
+    return sortAscending ? dateA - dateB : dateB - dateA;
+  });
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="lg" // Make the dialog wider
+      fullWidth
+      sx={{ "& .MuiDialog-paper": { minHeight: "80vh", maxHeight: "90vh" } }} // Increase the dialog height
+    >
       {/* Ticket Title and Status */}
-      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <DialogTitle sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         {/* Ticket Title */}
         {isEditing.title ? (
           <TextField
@@ -194,9 +220,7 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, shor
               </>
             ) : (
               <>
-                <Typography variant="body1">
-                  {editableFields.company}
-                </Typography>
+                <Typography variant="body1">{editableFields.company}</Typography>
                 <IconButton onClick={() => handleEdit("company")}>
                   <EditIcon />
                 </IconButton>
@@ -206,18 +230,34 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, shor
         </Box>
 
         {/* Notes Section */}
-        <Typography variant="body1" gutterBottom sx={{ mt: 2 }}>
-          Notes:
-        </Typography>
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+          <Typography
+            variant="h6"
+            onClick={toggleSort}
+            sx={{ cursor: "pointer", display: "flex", alignItems: "center" }}
+          >
+            Notes
+            {sortAscending ? <ArrowUpward fontSize="small" /> : <ArrowDownward fontSize="small" />}
+          </Typography>
+        </Box>
         {notes.length > 0 ? (
-          <Box sx={{ maxHeight: 300, overflowY: "auto", mb: 2 }}>
+          <Box sx={{ maxHeight: "60vh", overflowY: "auto", mb: 2 }}> {/* Larger scrollable area */}
             <List>
-              {notes.map((note, index) => (
+              {sortedNotes.map((note, index) => (
                 <ListItem key={index} divider>
-                  <ListItemText
-                    primary={`${note.createdBy} on ${new Date(note.dateCreated).toLocaleString()}`}
-                    secondary={note.text}
-                  />
+                  <Box sx={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
+                    <Box sx={{ minWidth: 150 }}>
+                      <Typography variant="body2" sx={{ color: "#333" }}>
+                        {new Date(note.dateCreated).toLocaleTimeString()}{" "}
+                        {new Date(note.dateCreated).toLocaleDateString()}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ maxWidth: "70%" }}>
+                      <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: "#000" }}>
+                        {note.text}
+                      </Typography>
+                    </Box>
+                  </Box>
                 </ListItem>
               ))}
             </List>
