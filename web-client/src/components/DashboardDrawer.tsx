@@ -1,49 +1,82 @@
-import { Drawer, List, ListItem, ListItemText, ListItemIcon, Divider, Toolbar } from "@mui/material";
+import { Link } from "react-router-dom";
+import {
+  Drawer,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Divider,
+} from "@mui/material";
 import HomeIcon from "@mui/icons-material/Home";
-import SyncIcon from "@mui/icons-material/Sync";
-import AssignmentIcon from "@mui/icons-material/Assignment";
+import ListAltIcon from "@mui/icons-material/ListAlt";
+import BusinessIcon from "@mui/icons-material/Business";
+import ViewKanbanIcon from "@mui/icons-material/ViewKanban";
 
 interface DashboardDrawerProps {
   drawerOpen: boolean;
   toggleDrawer: () => void;
-  switchToView: (view: "tickets" | "myTickets" | "cwManage") => void;
+  setViewMode: (viewMode: "cards" | "table" | "kanban") => void;
 }
 
-const DashboardDrawer: React.FC<DashboardDrawerProps> = ({ drawerOpen, toggleDrawer, switchToView }) => {
+export default function DashboardDrawer({
+  drawerOpen,
+  toggleDrawer,
+  setViewMode,
+}: DashboardDrawerProps) {
   return (
-    <Drawer
-      variant="temporary" // Change this to temporary for autoclose behavior
-      anchor="left"
-      open={drawerOpen}
-      onClose={toggleDrawer} // Close drawer when clicking outside
-      ModalProps={{
-        keepMounted: true, // Better open performance on mobile
-      }}
-    >
-      <Toolbar /> {/* This will help offset the AppBar height */}
-      <Divider />
+    <Drawer anchor="left" open={drawerOpen} onClose={toggleDrawer}>
       <List>
-        <ListItem button onClick={() => { switchToView("tickets"); toggleDrawer(); }}>
+        <ListItem
+          button
+          onClick={() => {
+            setViewMode("cards");
+            toggleDrawer();
+          }}
+        >
           <ListItemIcon>
             <HomeIcon />
           </ListItemIcon>
-          <ListItemText primary="Tickets" />
+          <ListItemText primary="Card View" />
         </ListItem>
-        <ListItem button onClick={() => { switchToView("myTickets"); toggleDrawer(); }}>
+
+        <ListItem
+          button
+          onClick={() => {
+            setViewMode("table");
+            toggleDrawer();
+          }}
+        >
           <ListItemIcon>
-            <AssignmentIcon />
+            <ListAltIcon />
           </ListItemIcon>
-          <ListItemText primary="My Tickets" />
+          <ListItemText primary="Table View" />
         </ListItem>
-        <ListItem button onClick={() => { switchToView("cwManage"); toggleDrawer(); }}>
+
+        <ListItem
+          button
+          onClick={() => {
+            setViewMode("kanban");
+            toggleDrawer();
+          }}
+        >
           <ListItemIcon>
-            <SyncIcon />
+            <ViewKanbanIcon />
           </ListItemIcon>
-          <ListItemText primary="CW Manage" />
+          <ListItemText primary="Kanban Board" />
+        </ListItem>
+
+        <ListItem
+          button
+          component={Link}
+          to="/cwManage"
+          onClick={toggleDrawer}
+        >
+          <ListItemIcon>
+            <BusinessIcon />
+          </ListItemIcon>
+          <ListItemText primary="CW Management" />
         </ListItem>
       </List>
     </Drawer>
   );
-};
-
-export default DashboardDrawer;
+}

@@ -1,24 +1,34 @@
-import { Card, CardContent, Typography, Box, Chip } from "@mui/material";
-import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
+import React from "react";
+import { Card, CardContent, Typography, Box, Chip, Avatar } from "@mui/material";
 import BusinessIcon from "@mui/icons-material/Business";
 import { Ticket } from "../interfaces";
 
 // Map of status colors
 const statusColors: { [key: string]: string } = {
-  "New": "#1976d2",
-  "In Progress": "#ff9800",
-  "Waiting on Customer": "#f44336",
-  "Closed": "#4caf50",
-  "Escalated": "#9c27b0",
-  // Add more statuses and colors as needed
+  New: "#1976d2",           // Blue (Primary)
+  Open: "#1976d2",          // Blue (Primary)
+  Reviewed: "#0288d1",       // Lighter Blue
+  Scheduled: "#7b1fa2",      // Purple
+  InProgress: "#ff9800",     // Orange
+  Closed: "#4caf50",         // Green
+  Cancelled: "#d32f2f",      // Red
+  OnHold: "#fbc02d",         // Yellow
+  Deferred: "#8e24aa",       // Dark Purple
+  Completed: "#388e3c",      // Dark Green
+  Failed: "#e53935",         // Dark Red
+  Blocked: "#ff7043",        // Muted Orange
+  Pending: "#c2185b",        // Magenta
+  Approved: "#009688",       // Teal
 };
 
 // Map of priority colors
-const priorityColors: { [key: string]: string } = {
-  "Priority 1 - Critical": "#f44336", // Red
-  "Priority 2 - High": "#ff9800", // Orange
-  "Priority 3 - Normal Response": "#4caf50", // Green
-  "Priority 4 - Low": "#9c27b0", // Purple
+const priorityColors: { [key: number]: string } = {
+  1: "#f44336", // Red
+  2: "#ff9800", // Orange
+  3: "#ffeb3b", // Yellow
+  4: "#2196f3", // Blue
+  5: "#ffffff", // White
+  6: "#9c27b0", // Purple
 };
 
 interface TicketCardProps {
@@ -27,11 +37,16 @@ interface TicketCardProps {
   shortenedSummary: string;
 }
 
-const TicketCard: React.FC<TicketCardProps> = ({ ticket, onClick, shortenedSummary }) => {
-  const statusColor = statusColors[ticket.status] || "#1976d2"; // Default color if status is not defined
-  const priorityColor = priorityColors[ticket.priority] || "#1976d2"; // Default color if priority is not defined
+const TicketCard: React.FC<TicketCardProps> = ({
+  ticket,
+  onClick,
+  shortenedSummary,
+}) => {
+  const statusColor = statusColors[ticket.status] || "#1976d2";
+  const priorityNumber = ticket.priority;
+  const priorityColor = priorityColors[priorityNumber] || "#1976d2";
 
-  const formattedDate = new Date(ticket.dateEntered).toLocaleString(); // Format dateEntered
+  const formattedDate = new Date(ticket.dateEntered).toLocaleString();
 
   return (
     <Card
@@ -78,31 +93,36 @@ const TicketCard: React.FC<TicketCardProps> = ({ ticket, onClick, shortenedSumma
             <strong>Date Entered:</strong> {formattedDate}
           </Typography>
         </Box>
-
-        {/* Priority */}
-        <Box sx={{ display: "flex", alignItems: "center", mt: 2 }}>
-          <Typography variant="body2" sx={{ color: "#666", mr: 1 }}>
-            <strong>Priority:</strong>
-          </Typography>
-          <Chip
-            label={ticket.priority}
-            sx={{
-              backgroundColor: priorityColor,
-              color: "#fff",
-              fontWeight: "bold",
-            }}
-          />
-        </Box>
       </CardContent>
 
-      {/* Status Label at Bottom Right */}
+      {/* Bottom Section */}
       <Box
         sx={{
           display: "flex",
-          justifyContent: "flex-end",
+          justifyContent: "space-between",
+          alignItems: "center",
           padding: 1,
         }}
       >
+        {/* Priority Circle */}
+        <Avatar
+          sx={{
+            bgcolor: priorityColor,
+            color: "#fff", // Ensuring the text color is white
+            width: 32,
+            height: 32,
+            border: "2px solid black",  // Black stroke around the exterior circle
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            fontWeight: "bold",  // Make the text bold for better visibility
+            textShadow: "1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000",  // Black stroke effect on text
+          }}
+        >
+          {priorityNumber}
+        </Avatar>
+
+        {/* Status Label */}
         <Typography
           variant="body2"
           sx={{

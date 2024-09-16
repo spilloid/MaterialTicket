@@ -19,13 +19,25 @@ export interface Company {
   PrimaryEngagementMgr: string;
 }
 
+export interface Note {
+  id: string;
+  dateCreated: string;
+  text: string;
+  authorId: string;
+  authorName: string;
+  type: "note" | "timeEntry";
+  timeStart?: string;
+  timeStop?: string;
+}
+
 export interface Ticket {
-  status: any;
+  status: string;
   ticketnumber: number;
   company: Company;
   ticketSummary: string;
-  ticketTitle: string;  // New field for ticket title
+  ticketTitle: string;
   technician: Technician | null;
   priority: string;
   timeEntries: TimeEntry[];
+  dateEntered: string;
 }

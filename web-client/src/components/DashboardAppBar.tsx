@@ -1,11 +1,19 @@
-import { AppBar, Toolbar, IconButton, Typography, Box, Slider } from "@mui/material";
+import React from "react";
+import {
+  AppBar,
+  Toolbar,
+  IconButton,
+  Typography,
+  Box,
+  Slider,
+} from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 
 interface DashboardAppBarProps {
   drawerOpen: boolean;
   toggleDrawer: () => void;
-  currentView: "tickets" | "myTickets" | "cwManage";
-  viewMode: "cards" | "table"; // Add viewMode prop
+  currentView: string;
+  viewMode: "cards" | "table" | "kanban";
   cardSize: number;
   handleCardSizeChange: (event: any, newValue: number | number[]) => void;
 }
@@ -26,26 +34,40 @@ const DashboardAppBar: React.FC<DashboardAppBarProps> = ({
         return "My Tickets";
       case "cwManage":
         return "CW Manage";
+      case "kanban":
+        return "Kanban Board";
       default:
         return "Dashboard";
     }
   };
 
   return (
-    <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+    <AppBar
+      position="fixed"
+      sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}
+    >
       <Toolbar>
-        <IconButton color="inherit" edge="start" onClick={toggleDrawer} sx={{ mr: 2 }}>
+        <IconButton
+          color="inherit"
+          edge="start"
+          onClick={toggleDrawer}
+          sx={{ mr: 2 }}
+        >
           <MenuIcon />
         </IconButton>
         <Typography variant="h6" noWrap>
           Dashboard - {getTitle()}
         </Typography>
-        <Box sx={{ flexGrow: 1 }} /> {/* This pushes the slider to the right */}
+        <Box sx={{ flexGrow: 1 }} />
 
         {/* Conditionally render the slider only when in card view */}
         {viewMode === "cards" && (
           <Box sx={{ width: 200 }}>
-            <Typography variant="body2" color="inherit" sx={{ mr: 2 }}>
+            <Typography
+              variant="body2"
+              color="inherit"
+              sx={{ mr: 2, textAlign: "center" }}
+            >
               Card Size
             </Typography>
             <Slider
@@ -56,7 +78,7 @@ const DashboardAppBar: React.FC<DashboardAppBarProps> = ({
               min={1}
               max={6}
               valueLabelDisplay="auto"
-              sx={{ color: "#fff" }} // Optional: Adjust the color to match AppBar
+              sx={{ color: "#fff" }}
             />
           </Box>
         )}

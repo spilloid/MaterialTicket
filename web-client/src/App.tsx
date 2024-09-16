@@ -1,4 +1,12 @@
+// ./App.tsx
 import { useState, useEffect, useCallback } from "react";
+import {
+  BrowserRouter as Router, // You can remove this import since we're wrapping App with BrowserRouter in main.tsx
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+} from "react-router-dom";
 import {
   Box,
   CssBaseline,
@@ -17,7 +25,8 @@ import FilterDialog from "./components/FilterDialog";
 import CWManageView from "./components/CWManageView";
 import TicketDialog from "./components/TicketDialog";
 import TicketTable from "./components/TicketTable";
-import { Ticket, Technician, Company } from "./interfaces";
+import KanbanBoard from "./components/KanbanBoard";
+import { Ticket, Technician, Company, Note } from "./interfaces";
 
 // Define Theme for Styling
 const defaultTheme = createTheme({
@@ -43,63 +52,65 @@ function App() {
   const [filterDialogOpen, setFilterDialogOpen] = useState<boolean>(false);
   const [ticketDialogOpen, setTicketDialogOpen] = useState<boolean>(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-  const [ticketNotes, setTicketNotes] = useState<any[]>([]);
-  const [currentView, setCurrentView] = useState<"tickets" | "myTickets" | "cwManage">("tickets");
-  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
-  const [cardSize, setCardSize] = useState<number>(5); // State to manage card size dynamically
+  const [ticketNotes, setTicketNotes] = useState<Note[]>([]);
+  const [viewMode, setViewMode] = useState<"cards" | "table" | "kanban">(
+    "cards"
+  );
+  const [cardSize, setCardSize] = useState<number>(5);
+
+  const [currentUser, setCurrentUser] = useState<any>({
+    id: 1,
+    name: "John Doe",
+  });
+
+  // Remove useNavigate if not used in this component
+  // const navigate = useNavigate();
 
   const toggleDrawer = () => {
     setDrawerOpen(!drawerOpen);
   };
 
-  const fetchTickets = useCallback(
-    async (forceUpdate: boolean = false) => {
-      setLoading(true);
-      try {
-        let endpoint = `/api/Tickets/Open${forceUpdate ? "?forceUpdate=true" : ""}`;
-        if (currentView === "myTickets") {
-          endpoint = `/api/Tickets/ByResource/jspillers${forceUpdate ? "?forceUpdate=true" : ""}`;
-        }
-
-        const response = await fetch(endpoint);
-        if (!response.ok) {
-          throw new Error("Failed to fetch tickets");
-        }
-        const data = await response.json();
-
-        const mappedTickets: Ticket[] = data.map((ticket: any) => ({
-          ticketnumber: ticket.id,
-          ticketSummary: " ", // ticket.name
-          ticketTitle: ticket.summary,
-          company: {
-            CompanyName: ticket.company.name,
-            Acronym: ticket.company.identifier,
-            PrimaryEngagementMgr: ticket.company._info.updatedBy,
-          } as Company,
-          technician: ticket.technician
-            ? {
-                TechnicianID: ticket.technician.id,
-                FirstName: ticket.technician.firstName,
-                LastName: ticket.technician.lastName,
-                Username: ticket.technician.username,
-              } as Technician
-            : null,
-          priority: ticket.priority.name,
-          status: ticket.status.name,
-          dateEntered: ticket.dateEntered,
-          timeEntries: ticket.timeEntries || [],
-        }));
-
-        setTickets(mappedTickets);
-        setFilteredTickets(mappedTickets);
-      } catch (err) {
-        setError(err as Error);
-      } finally {
-        setLoading(false);
+  const fetchTickets = useCallback(async (forceUpdate: boolean = false) => {
+    setLoading(true);
+    try {
+      let endpoint = `/api/Tickets/Open${forceUpdate ? "?forceUpdate=true" : ""}`;
+      const response = await fetch(endpoint);
+      if (!response.ok) {
+        throw new Error("Failed to fetch tickets");
       }
-    },
-    [currentView]
-  );
+      const data = await response.json();
+
+      const mappedTickets: Ticket[] = data.map((ticket: any) => ({
+        ticketnumber: ticket.id,
+        ticketSummary: ticket.description || "No summary provided",
+        ticketTitle: ticket.summary,
+        company: {
+          CompanyName: ticket.company.name,
+          Acronym: ticket.company.identifier,
+          PrimaryEngagementMgr: ticket.company._info.updatedBy,
+        } as Company,
+        technician: ticket.technician
+          ? {
+              TechnicianID: ticket.technician.id,
+              FirstName: ticket.technician.firstName,
+              LastName: ticket.technician.lastName,
+              Username: ticket.technician.username,
+            } as Technician
+          : null,
+        priority: ticket.priority.sort.toString(),
+        status: ticket.status.name,
+        dateEntered: ticket.dateEntered,
+        timeEntries: ticket.timeEntries || [],
+      }));
+
+      setTickets(mappedTickets);
+      setFilteredTickets(mappedTickets);
+    } catch (err) {
+      setError(err as Error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const fetchTicketNotes = async (ticketId: number) => {
     try {
@@ -108,7 +119,17 @@ function App() {
         throw new Error("Failed to fetch ticket notes");
       }
       const data = await response.json();
-      return data;
+      const mappedNotes: Note[] = data.map((note: any) => ({
+        id: note.id,
+        dateCreated: note.dateCreated,
+        text: note.text,
+        authorId: note.authorId,
+        authorName: note.authorName,
+        type: note.type,
+        timeStart: note.timeStart,
+        timeStop: note.timeStop,
+      }));
+      return mappedNotes;
     } catch (err) {
       console.error("Error fetching notes:", err);
       return [];
@@ -118,10 +139,10 @@ function App() {
   const handleTicketClick = async (ticket: Ticket) => {
     setLoading(true);
     setSelectedTicket(ticket);
+    setTicketDialogOpen(true); // Moved this line up
 
     const notes = await fetchTicketNotes(ticket.ticketnumber);
     setTicketNotes(notes);
-    setTicketDialogOpen(true);
     setLoading(false);
   };
 
@@ -144,9 +165,22 @@ function App() {
     setCardSize(newValue as number);
   };
 
+  const handleStatusChange = (ticketId: number, newStatus: string) => {
+    // Update the ticket status locally
+    setTickets((prevTickets) =>
+      prevTickets.map((ticket) =>
+        ticket.ticketnumber === ticketId
+          ? { ...ticket, status: newStatus }
+          : ticket
+      )
+    );
+    // Optionally, make an API call to update the status in the backend
+    console.log(`Ticket ${ticketId} status changed to ${newStatus}`);
+  };
+
   useEffect(() => {
     fetchTickets();
-  }, [fetchTickets, currentView]);
+  }, [fetchTickets]);
 
   return (
     <ThemeProvider theme={defaultTheme}>
@@ -155,59 +189,95 @@ function App() {
         <DashboardAppBar
           drawerOpen={drawerOpen}
           toggleDrawer={toggleDrawer}
-          currentView={currentView}
-          viewMode={viewMode} // Pass viewMode to AppBar
-          cardSize={cardSize} // Pass cardSize to AppBar
-          handleCardSizeChange={handleCardSizeChange} // Pass handler to AppBar
+          currentView={viewMode}
+          viewMode={viewMode}
+          cardSize={cardSize}
+          handleCardSizeChange={handleCardSizeChange}
         />
         <DashboardDrawer
           drawerOpen={drawerOpen}
           toggleDrawer={toggleDrawer}
-          switchToView={(view) => setCurrentView(view)}
+          setViewMode={setViewMode}
         />
 
-        <Box component="main" sx={{ flexGrow: 1, p: 3, backgroundColor: "background.default" }}>
+        <Box
+          component="main"
+          sx={{ flexGrow: 1, p: 3, backgroundColor: "background.default" }}
+        >
           <Toolbar />
 
-          {currentView === "tickets" || currentView === "myTickets" ? (
-            <>
-              <Button
-                variant="contained"
-                onClick={() => setViewMode((prev) => (prev === "cards" ? "table" : "cards"))}
-                sx={{ mb: 2 }}
-              >
-                {viewMode === "cards" ? "Switch to Table View" : "Switch to Card View"}
-              </Button>
+          {/* View Mode Buttons */}
+          <Box sx={{ mb: 2 }}>
+            <Button
+              variant="contained"
+              onClick={() => setViewMode("cards")}
+              sx={{ mr: 2 }}
+              disabled={viewMode === "cards"}
+            >
+              Card View
+            </Button>
+            <Button
+              variant="contained"
+              onClick={() => setViewMode("table")}
+              sx={{ mr: 2 }}
+              disabled={viewMode === "table"}
+            >
+              Table View
+            </Button>
+            <Button
+              variant="contained"
+              onClick={() => setViewMode("kanban")}
+              sx={{ mr: 2 }}
+              disabled={viewMode === "kanban"}
+            >
+              Kanban View
+            </Button>
+            <Button
+              variant="contained"
+              onClick={() => setFilterDialogOpen(true)}
+            >
+              Filter Tickets
+            </Button>
+          </Box>
 
-              <Button variant="contained" onClick={() => setFilterDialogOpen(true)} sx={{ mb: 2, ml: 2 }}>
-                Filter Tickets
-              </Button>
-
-              {error && <Typography color="error">Error: {error.message}</Typography>}
-              {loading ? (
-                <CircularProgress />
-              ) : filteredTickets.length > 0 ? (
-                viewMode === "cards" ? (
-                  <Grid container spacing={3} sx={{ mt: 2 }}>
-                    {filteredTickets.map((ticket) => (
-                      <Grid item xs={12} sm={6} md={12 / cardSize} key={ticket.ticketnumber}>
-                        <TicketCard
-                          ticket={ticket}
-                          onClick={() => handleTicketClick(ticket)}
-                          shortenedSummary={shortenSummary(ticket.ticketSummary)}
-                        />
-                      </Grid>
-                    ))}
+          {error && (
+            <Typography color="error">Error: {error.message}</Typography>
+          )}
+          {loading ? (
+            <CircularProgress />
+          ) : filteredTickets.length > 0 ? (
+            viewMode === "cards" ? (
+              <Grid container spacing={3} sx={{ mt: 2 }}>
+                {filteredTickets.map((ticket) => (
+                  <Grid
+                    item
+                    xs={12}
+                    sm={6}
+                    md={12 / cardSize}
+                    key={ticket.ticketnumber}
+                  >
+                    <TicketCard
+                      ticket={ticket}
+                      onClick={() => handleTicketClick(ticket)}
+                      shortenedSummary={shortenSummary(ticket.ticketSummary)}
+                    />
                   </Grid>
-                ) : (
-                  <TicketTable tickets={filteredTickets} onRowClick={handleTicketClick} />
-                )
-              ) : (
-                <Typography variant="body1">No tickets found.</Typography>
-              )}
-            </>
+                ))}
+              </Grid>
+            ) : viewMode === "table" ? (
+              <TicketTable
+                tickets={filteredTickets}
+                onRowClick={handleTicketClick}
+              />
+            ) : (
+              <KanbanBoard
+                tickets={filteredTickets}
+                onStatusChange={handleStatusChange}
+                onTicketClick={handleTicketClick}
+              />
+            )
           ) : (
-            <CWManageView fetchTickets={() => fetchTickets(true)} />
+            <Typography variant="body1">No tickets found.</Typography>
           )}
         </Box>
 
@@ -223,8 +293,8 @@ function App() {
             ticket={selectedTicket}
             open={ticketDialogOpen}
             onClose={handleTicketDialogClose}
-            shortenedSummary={shortenSummary(selectedTicket.ticketSummary)}
             notes={ticketNotes}
+            currentUser={currentUser}
           />
         )}
       </Box>
