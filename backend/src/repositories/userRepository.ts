@@ -172,6 +172,14 @@ export function countActiveAdmins(): Promise<number> {
   return prisma.user.count({ where: { role: 'admin', isActive: true } });
 }
 
+/** Active users who can own a ticket (admins + technicians). For the assignee picker. */
+export function listAssignable(): Promise<User[]> {
+  return prisma.user.findMany({
+    where: { isActive: true, role: { in: ['admin', 'technician'] } },
+    orderBy: [{ displayName: 'asc' }, { username: 'asc' }],
+  });
+}
+
 // ─── TOTP / MFA ────────────────────────────────────────────────────────────
 
 /** Stage a candidate TOTP secret (not yet active — totpEnabled stays false). */

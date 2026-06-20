@@ -18,6 +18,7 @@ import {
   TextField,
   Alert,
   Tooltip,
+  Autocomplete,
 } from "@mui/material";
 import { Close } from "@mui/icons-material";
 import ComputerIcon from "@mui/icons-material/Computer";
@@ -63,17 +64,50 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
   const [jobs, setJobs] = useState<any[]>([]);
   const [mailConfigured, setMailConfigured] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
+  const [assignees, setAssignees] = useState<api.Assignee[]>([]);
+  const [assigneeId, setAssigneeId] = useState<number | "">("");
+  const [allDevices, setAllDevices] = useState<any[]>([]);
+  const [addDevice, setAddDevice] = useState<any | null>(null);
 
-  // Load the cockpit: full ticket record, linked devices, script jobs, mail status.
+  const reloadDevices = useCallback(() => {
+    if (ticket.localId == null) return;
+    api.listTicketDevices(ticket.localId).then((d) => setDevices(d as any[])).catch(() => setDevices([]));
+  }, [ticket.localId]);
+
+  // Load the cockpit: full ticket record, linked devices, script jobs, mail,
+  // assignable users, and the device pool for linking.
   useEffect(() => {
     if (!open || ticket.localId == null) return;
     const id = ticket.localId;
-    api.getTicket(id).then((t) => { setFull(t as any); setStatus((t as any).status ?? status); }).catch(() => setFull(null));
-    api.listTicketDevices(id).then((d) => setDevices(d as any[])).catch(() => setDevices([]));
+    api.getTicket(id).then((t) => {
+      setFull(t as any);
+      setStatus((t as any).status ?? status);
+      setAssigneeId(((t as any).assigneeId as number) ?? "");
+    }).catch(() => setFull(null));
+    reloadDevices();
     api.listTicketScriptJobs(id).then((j) => setJobs(j as any[])).catch(() => setJobs([]));
     api.getMailStatus().then((m) => setMailConfigured(m.configured)).catch(() => setMailConfigured(false));
+    api.listAssignees().then(setAssignees).catch(() => setAssignees([]));
+    api.listDevices({ pageSize: 500 }).then((d) => setAllDevices(d as any[])).catch(() => setAllDevices([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, ticket.localId]);
+
+  const saveAssignee = (id: number | "") => {
+    setAssigneeId(id);
+    const u = assignees.find((a) => a.id === id);
+    persist({ assigneeId: id === "" ? null : id, assignee: u ? (u.displayName || u.username) : null });
+  };
+
+  const linkDevice = async () => {
+    if (ticket.localId == null || !addDevice) return;
+    try { await api.linkDevice(ticket.localId, addDevice.id); setAddDevice(null); reloadDevices(); }
+    catch (err) { console.error("link device failed", err); }
+  };
+  const unlinkDevice = async (deviceId: number) => {
+    if (ticket.localId == null) return;
+    try { await api.unlinkDevice(ticket.localId, deviceId); reloadDevices(); }
+    catch (err) { console.error("unlink device failed", err); }
+  };
 
   const persist = useCallback(async (data: Record<string, unknown>) => {
     if (ticket.localId == null) return;
@@ -148,7 +182,17 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
                   <EditableField label="Title" value={title} onSave={(v) => { setTitle(v); persist({ title: v }); }} />
                   <EditableField label="Priority" value={priority} options={["1", "2", "3", "4", "5", "6"]} onSave={(v) => { setPriority(v); persist({ priority: v }); }} />
                   <EditableField label="Company" value={companyName} onSave={(v) => { setCompanyName(v); persist({ companyName: v }); }} />
-                  <MetaRow icon={<PersonIcon fontSize="small" />} label="Assignee" value={ticket.assignee || "Unassigned"} />
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Box sx={{ color: "text.secondary", display: "flex" }}><PersonIcon fontSize="small" /></Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ width: 70 }}>Assignee</Typography>
+                    <Select size="small" value={assigneeId} displayEmpty sx={{ flexGrow: 1 }}
+                      onChange={(e) => saveAssignee(e.target.value === "" ? "" : Number(e.target.value))}>
+                      <MenuItem value="">Unassigned</MenuItem>
+                      {assignees.map((a) => (
+                        <MenuItem key={a.id} value={a.id}>{a.displayName || a.username} · {a.role}</MenuItem>
+                      ))}
+                    </Select>
+                  </Stack>
                   <MetaRow icon={<BusinessIcon fontSize="small" />} label="Source" value={source} />
                   <MetaRow icon={<CalendarTodayIcon fontSize="small" />} label="Created" value={created} />
                 </Stack>
@@ -162,9 +206,9 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
                   Devices {devices.length > 0 && `(${devices.length})`}
                 </Typography>
                 {devices.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">No devices linked.</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>No devices linked.</Typography>
                 ) : (
-                  <Stack spacing={1}>
+                  <Stack spacing={1} sx={{ mb: 1.5 }}>
                     {devices.map((d) => {
                       const canRun = !!d.externalId && d.source !== "local" && d.source !== "netviz";
                       return (
@@ -179,11 +223,27 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
                               <IconButton size="small" onClick={() => setScriptDevice(d)}><TerminalIcon fontSize="small" /></IconButton>
                             </Tooltip>
                           )}
+                          <Tooltip title="Unlink device">
+                            <IconButton size="small" onClick={() => unlinkDevice(d.id)}><Close fontSize="small" /></IconButton>
+                          </Tooltip>
                         </Stack>
                       );
                     })}
                   </Stack>
                 )}
+                {/* Link an existing device to this ticket */}
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Autocomplete
+                    size="small"
+                    sx={{ flexGrow: 1 }}
+                    options={allDevices.filter((d) => !devices.some((ld) => ld.id === d.id))}
+                    getOptionLabel={(d) => `${d.displayName || d.hostname || d.ipAddress || "device"}${d.ipAddress ? ` · ${d.ipAddress}` : ""}`}
+                    value={addDevice}
+                    onChange={(_e, v) => setAddDevice(v)}
+                    renderInput={(params) => <TextField {...params} label="Link a device" />}
+                  />
+                  <Button size="small" variant="outlined" disabled={!addDevice} onClick={linkDevice}>Link</Button>
+                </Stack>
               </CardContent>
             </Card>
 

@@ -133,6 +133,18 @@ export function listUsers() {
   return request<ManagedUser[]>("/users");
 }
 
+export interface Assignee {
+  id: number;
+  username: string;
+  displayName: string | null;
+  role: string;
+}
+
+/** Active admins + technicians, for the ticket assignee picker. */
+export function listAssignees() {
+  return request<Assignee[]>("/assignees");
+}
+
 export function createUser(data: {
   username: string;
   password: string;

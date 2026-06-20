@@ -29,6 +29,13 @@ const isRole = (r: unknown): r is UserRole => typeof r === 'string' && ROLES.inc
 export async function userRoutes(server: FastifyInstance) {
   const adminOnly = { preHandler: requireRole('admin') };
 
+  // Assignable users (admins + technicians) for the ticket assignee picker.
+  // Authenticated but not admin-only — any user can see who a ticket can go to.
+  server.get('/assignees', async (_req, reply) => {
+    const users = await userRepo.listAssignable();
+    return reply.send(users.map((u) => ({ id: u.id, username: u.username, displayName: u.displayName, role: u.role })));
+  });
+
   // ─── Users ────────────────────────────────────────────────────────────────
   server.get('/users', adminOnly, async (_req, reply) => {
     const users = await userRepo.list();
