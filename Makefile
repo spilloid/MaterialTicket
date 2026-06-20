@@ -16,10 +16,10 @@
 #   make redeploy  # build + push + rollout restart (images auto-pulled)
 
 REGISTRY   ?= ghcr.io/spilloid
-TAG        ?= dev
+TAG        ?= latest
 NS         ?= anchordesk
 BACKEND_IMG = $(REGISTRY)/anchordesk-backend:$(TAG)
-WEB_IMG     = $(REGISTRY)/anchordesk-web:$(TAG)
+WEB_IMG     = $(REGISTRY)/anchordesk-web-client:$(TAG)
 
 .PHONY: all build push deploy redeploy secrets status logs logs-web logs-db \
         shell-backend shell-db db-push restart clean help
