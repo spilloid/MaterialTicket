@@ -17,6 +17,8 @@ import {
   Tooltip,
   IconButton,
   Paper,
+  Pagination,
+  Badge,
 } from "@mui/material";
 import { theme as defaultTheme } from "./theme";
 import DashboardAppBar from "./components/DashboardAppBar";
@@ -72,29 +74,49 @@ function mapDbNote(n: Record<string, unknown>): Note {
     text: String(n.content ?? ""),
     authorId: String(n.authorId ?? ""),
     authorName: String(n.author ?? ""),
-    type: n.noteType === "time_entry" ? "timeEntry" : "note",
+    type: n.noteType === "time_entry" ? "timeEntry" : n.noteType === "email" ? "email" : "note",
     timeStart: n.timeStart ? String(n.timeStart) : undefined,
     timeStop: n.timeStop ? String(n.timeStop) : undefined,
     minutes: n.minutes != null ? Number(n.minutes) : undefined,
+    direction: n.direction ? (String(n.direction) as "inbound" | "outbound") : undefined,
+    html: n.htmlContent ? String(n.htmlContent) : undefined,
+    emailFrom: n.emailFrom ? String(n.emailFrom) : undefined,
+    emailTo: n.emailTo ? String(n.emailTo) : undefined,
+    emailCc: n.emailCc ? String(n.emailCc) : undefined,
+    subject: n.subject ? String(n.subject) : undefined,
   };
+}
+
+// Per-view page sizes. Cards/table page modestly; kanban is bounded (a board
+// over thousands of cards isn't meaningful — narrow with search/filters).
+const PAGE_SIZE: Record<string, number> = { cards: 24, table: 50, kanban: 200 };
+
+export interface TicketFilterCriteria {
+  status?: string;
+  assignee?: string;
+  company?: string;
 }
 
 function App() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [tickets, setTickets] = useState<(Ticket & { localId: number })[]>([]);
-  const [filteredTickets, setFilteredTickets] = useState<(Ticket & { localId: number })[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1); // 1-based
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [filterDialogOpen, setFilterDialogOpen] = useState(false);
+  const [filters, setFilters] = useState<TicketFilterCriteria>({});
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [ticketNotes, setTicketNotes] = useState<Note[]>([]);
   const [viewMode, setViewMode] = useState<"cards" | "table" | "kanban" | "sync" | "admin" | "network" | "companies">("cards");
-  const [cardSize, setCardSize] = useState(5);
   const [toast, setToast] = useState<{ message: string; severity: "success" | "error" } | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [networkCompany, setNetworkCompany] = useState<string | undefined>(undefined);
+
+  const pageSize = PAGE_SIZE[viewMode] ?? 50;
 
   const { user, loading: authLoading, isAdmin, setUser } = useAuth();
   const currentUser = { id: user?.id ?? 0, name: user?.displayName ?? user?.username ?? "User" };
@@ -103,16 +125,22 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.listTickets({ pageSize: 200 });
-      const mapped = (data as Record<string, unknown>[]).map(mapDbTicket);
-      setTickets(mapped);
-      setFilteredTickets(mapped);
+      const res = await api.listTickets({
+        page,
+        pageSize,
+        q: debouncedSearch || undefined,
+        status: filters.status || undefined,
+        assignee: filters.assignee || undefined,
+        company: filters.company || undefined,
+      });
+      setTickets((res.items as Record<string, unknown>[]).map(mapDbTicket));
+      setTotal(res.total);
     } catch (err) {
       setError(err as Error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, pageSize, debouncedSearch, filters]);
 
   const fetchTicketNotes = async (ticketId: number): Promise<Note[]> => {
     try {
@@ -149,54 +177,44 @@ function App() {
   };
 
   const handleStatusChange = async (ticketId: number, newStatus: string) => {
-    // Optimistic update
-    const update = (list: (Ticket & { localId: number })[]) =>
-      list.map((t) => (t.localId === ticketId ? { ...t, status: newStatus } : t));
-    setTickets((prev) => update(prev));
-    setFilteredTickets((prev) => update(prev));
-
+    // Optimistic update of the current page.
+    setTickets((prev) => prev.map((t) => (t.localId === ticketId ? { ...t, status: newStatus } : t)));
     try {
       await api.updateTicket(ticketId, { status: newStatus });
       setToast({ message: `Status updated to ${newStatus}`, severity: "success" });
     } catch (err) {
-      // Revert on failure by re-fetching
       setToast({ message: `Failed to update status: ${(err as Error).message}`, severity: "error" });
-      fetchTickets();
+      fetchTickets(); // revert by re-fetching
     }
   };
 
-  const applyFilters = (filtered: Ticket[]) => {
-    setFilteredTickets(filtered as (Ticket & { localId: number })[]);
+  const applyFilters = (criteria: TicketFilterCriteria) => {
+    setFilters(criteria);
+    setPage(1);
     setFilterDialogOpen(false);
   };
 
   const shortenSummary = (summary: string) =>
     summary.length > 100 ? `${summary.slice(0, 100)}...` : summary;
 
-  const handleCardSizeChange = (_event: unknown, newValue: number | number[]) => {
-    setCardSize(newValue as number);
-  };
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
   useEffect(() => {
     if (user) fetchTickets();
   }, [fetchTickets, user]);
 
-  // Full-text search (debounced). Empty query falls back to the full list.
+  // Page size differs per view, so reset to page 1 when switching views.
+  useEffect(() => { setPage(1); }, [viewMode]);
+
+  // Debounce the search box, then drive the server query. Reset to page 1 on
+  // a new search so results aren't hidden on a stale page.
   useEffect(() => {
-    if (!user) return;
-    const q = searchTerm.trim();
-    if (!q) {
-      setFilteredTickets(tickets);
-      return;
-    }
     const handle = setTimeout(() => {
-      api
-        .searchTickets(q)
-        .then((data) => setFilteredTickets((data as Record<string, unknown>[]).map(mapDbTicket)))
-        .catch(() => {});
+      setDebouncedSearch(searchTerm.trim());
+      setPage(1);
     }, 300);
     return () => clearTimeout(handle);
-  }, [searchTerm, tickets, user]);
+  }, [searchTerm]);
 
   if (authLoading) {
     return (
@@ -233,8 +251,6 @@ function App() {
           toggleDrawer={() => setDrawerOpen(!drawerOpen)}
           currentView={viewMode}
           viewMode={viewMode}
-          cardSize={cardSize}
-          handleCardSizeChange={handleCardSizeChange}
         />
         <DashboardDrawer
           drawerOpen={drawerOpen}
@@ -274,7 +290,11 @@ function App() {
               />
 
               <Tooltip title="Filter">
-                <IconButton onClick={() => setFilterDialogOpen(true)}><FilterListIcon /></IconButton>
+                <IconButton onClick={() => setFilterDialogOpen(true)}>
+                  <Badge badgeContent={activeFilterCount} color="primary">
+                    <FilterListIcon />
+                  </Badge>
+                </IconButton>
               </Tooltip>
 
               <Box sx={{ flexGrow: 1 }} />
@@ -302,27 +322,58 @@ function App() {
 
           {loading ? (
             <CircularProgress />
-          ) : filteredTickets.length > 0 ? (
+          ) : viewMode === "table" ? (
+            // DataGrid is virtualized + paginates server-side; it renders its own
+            // footer and empty state, so it sits outside the cards/kanban branch.
+            <TicketTable
+              tickets={tickets}
+              rowCount={total}
+              page={page - 1}
+              pageSize={pageSize}
+              onPageChange={(p) => setPage(p + 1)}
+              onRowClick={handleTicketClick}
+            />
+          ) : tickets.length > 0 ? (
             viewMode === "cards" ? (
-              <Grid container spacing={3} sx={{ mt: 2 }}>
-                {filteredTickets.map((ticket) => (
-                  <Grid item xs={12} sm={6} md={12 / cardSize} key={ticket.localId}>
-                    <TicketCard
-                      ticket={ticket}
-                      onClick={() => handleTicketClick(ticket)}
-                      shortenedSummary={shortenSummary(ticket.ticketSummary)}
-                    />
-                  </Grid>
-                ))}
-              </Grid>
-            ) : viewMode === "table" ? (
-              <TicketTable tickets={filteredTickets} onRowClick={handleTicketClick} />
+              <>
+                <Grid container spacing={3} sx={{ mt: 0 }}>
+                  {tickets.map((ticket) => (
+                    <Grid item xs={12} sm={6} md={4} lg={3} key={ticket.localId}>
+                      <TicketCard
+                        ticket={ticket}
+                        onClick={() => handleTicketClick(ticket)}
+                        shortenedSummary={shortenSummary(ticket.ticketSummary)}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mt: 3 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
+                  </Typography>
+                  <Pagination
+                    count={Math.max(1, Math.ceil(total / pageSize))}
+                    page={page}
+                    onChange={(_e, p) => setPage(p)}
+                    color="primary"
+                    shape="rounded"
+                  />
+                </Box>
+              </>
             ) : (
-              <KanbanBoard
-                tickets={filteredTickets}
-                onStatusChange={(ticketId, newStatus) => handleStatusChange(ticketId, newStatus)}
-                onTicketClick={handleTicketClick}
-              />
+              // Kanban: bounded to one page; warn when more tickets exist than shown.
+              <>
+                {total > tickets.length && (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    Showing {tickets.length} of {total} tickets. Use search or filters to narrow the board.
+                  </Alert>
+                )}
+                <KanbanBoard
+                  tickets={tickets}
+                  onStatusChange={(ticketId, newStatus) => handleStatusChange(ticketId, newStatus)}
+                  onTicketClick={handleTicketClick}
+                />
+              </>
             )
           ) : (
             <Typography variant="body1">No tickets found.</Typography>
@@ -334,7 +385,7 @@ function App() {
         <FilterDialog
           open={filterDialogOpen}
           onClose={() => setFilterDialogOpen(false)}
-          tickets={tickets}
+          value={filters}
           applyFilters={applyFilters}
         />
 
@@ -345,6 +396,9 @@ function App() {
             onClose={handleTicketDialogClose}
             notes={ticketNotes}
             currentUser={currentUser}
+            onNotesChanged={async () => {
+              if (selectedTicket?.localId != null) setTicketNotes(await fetchTicketNotes(selectedTicket.localId));
+            }}
             onUpdated={(field) => {
               fetchTickets();
               setToast({ message: field === "status" ? "Status updated" : "Ticket updated", severity: "success" });

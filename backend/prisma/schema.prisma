@@ -134,6 +134,7 @@ model Company {
   contacts Contact[]
   tickets  Ticket[]
   devices  Device[]
+  probes   Probe[]
 
   @@map("companies")
 }
@@ -205,6 +206,17 @@ model Note {
   // "30m" directly without start/stop; totals sum this field.
   minutes    Int?
   externalId String?   @map("external_id") @db.VarChar(100)
+  // Email correspondence metadata (noteType = email). `content` holds the plain-text
+  // body (search/preview); `htmlContent` holds the sanitized HTML rendered in the
+  // conversation view. `direction` is "inbound" | "outbound". `inReplyTo` is the
+  // Message-ID this email replied to, for thread rendering.
+  direction   String?  @db.VarChar(10)
+  htmlContent String?  @map("html_content") @db.Text
+  emailFrom   String?  @map("email_from") @db.VarChar(320)
+  emailTo     String?  @map("email_to") @db.Text
+  emailCc     String?  @map("email_cc") @db.Text
+  subject     String?  @db.VarChar(255)
+  inReplyTo   String?  @map("in_reply_to") @db.VarChar(100)
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
 
@@ -347,13 +359,17 @@ model Probe {
   name        String      @db.VarChar(150)
   apiKey      String      @unique @map("api_key") @db.VarChar(100)
   kind        String      @default("netviz") @db.VarChar(50)
+  // companyName stays denormalized (back-compat / probe self-service); companyId
+  // links the probe — and by extension its discovered devices — to a Company.
   companyName String?     @map("company_name") @db.VarChar(150)
+  companyId   Int?        @map("company_id")
   cidr        String?     @db.VarChar(100)
   version     String?     @db.VarChar(50)
   status      ProbeStatus @default(offline)
   lastSeenAt  DateTime?   @map("last_seen_at")
   createdAt   DateTime    @default(now()) @map("created_at")
 
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   devices Device[]
 
   @@map("probes")
@@ -381,6 +397,7 @@ enum TicketSource {
 enum NoteType {
   note
   time_entry
+  email
 }
 
 enum AuditAction {

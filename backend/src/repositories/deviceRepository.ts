@@ -22,6 +22,7 @@ export interface CreateDeviceInput {
   openPorts?: unknown;
   status?: string;
   companyName?: string;
+  companyId?: number | null;
   source?: DeviceSource;
   probeId?: number;
   externalId?: string;
@@ -45,6 +46,7 @@ function toData(input: CreateDeviceInput) {
     openPorts: (input.openPorts as Prisma.InputJsonValue) ?? undefined,
     status: input.status,
     companyName: input.companyName,
+    companyId: input.companyId ?? undefined,
     source: input.source,
     probeId: input.probeId,
     externalId: input.externalId,

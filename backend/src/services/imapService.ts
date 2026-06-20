@@ -17,6 +17,7 @@ import { prisma } from '../db/prisma';
 import * as mailboxRepo from '../repositories/mailboxRepository';
 import * as ticketRepo from '../repositories/ticketRepository';
 import * as noteRepo from '../repositories/noteRepository';
+import { sanitizeEmailHtml } from './mail/sanitizeHtml';
 
 export interface PollResult {
   mailbox: string;
@@ -45,7 +46,24 @@ async function ingest(parsed: ParsedMail, mb: Mailbox, uid: number): Promise<'cr
   const messageId = parsed.messageId || `<imap-${mb.id}-${uid}@local>`;
   const fromText = parsed.from?.text || 'unknown sender';
   const body = bodyOf(parsed);
-  const content = `From: ${fromText}\n\n${body}`;
+  const html = parsed.html ? sanitizeEmailHtml(parsed.html) : undefined;
+  const subject = parsed.subject || '(no subject)';
+  const toText = parsed.to ? (Array.isArray(parsed.to) ? parsed.to.map((a) => a.text).join(', ') : parsed.to.text) : undefined;
+
+  // Email correspondence is recorded as an `email` note so the UI renders it as a
+  // conversation (with from/to/subject + sanitized HTML), distinct from internal notes.
+  const emailNote = {
+    noteType: 'email' as const,
+    direction: 'inbound' as const,
+    content: body,
+    htmlContent: html,
+    author: fromText,
+    emailFrom: fromText,
+    emailTo: toText,
+    subject,
+    externalId: messageId,
+    inReplyTo: parsed.inReplyTo,
+  };
 
   // Is this a reply to a thread we already know?
   const refs = refsOf(parsed);
@@ -63,13 +81,13 @@ async function ingest(parsed: ParsedMail, mb: Mailbox, uid: number): Promise<'cr
   }
 
   if (ticketId) {
-    await noteRepo.create(ticketId, { content, author: fromText, externalId: messageId }, 'imap');
+    await noteRepo.create(ticketId, emailNote, 'imap');
     return 'appended';
   }
 
   const ticket = await ticketRepo.create(
     {
-      title: (parsed.subject || '(no subject)').slice(0, 255),
+      title: subject.slice(0, 255),
       summary: body.slice(0, 200),
       description: body,
       companyName: mb.companyName ?? undefined,
@@ -79,7 +97,7 @@ async function ingest(parsed: ParsedMail, mb: Mailbox, uid: number): Promise<'cr
     },
     'imap'
   );
-  await noteRepo.create(ticket.id, { content, author: fromText, externalId: messageId }, 'imap');
+  await noteRepo.create(ticket.id, emailNote, 'imap');
   return 'created';
 }
 

@@ -7,8 +7,33 @@ export interface TicketListOptions {
   assignee?: string;
   companyName?: string;
   source?: TicketSource;
+  /** Free-text filter across title/summary/company (case-insensitive contains). */
+  q?: string;
+  /** Exclude soft-deleted tickets (status = 'Deleted'). Default true. */
+  includeDeleted?: boolean;
   page?: number;
   pageSize?: number;
+}
+
+/** Build the Prisma where-clause shared by list() and count() so paging totals
+ *  always match the rows returned. */
+function buildWhere(filters: Omit<TicketListOptions, 'page' | 'pageSize'>): Prisma.TicketWhereInput {
+  const where: Prisma.TicketWhereInput = {};
+  if (filters.status) where.status = filters.status;
+  if (filters.assignee) where.assignee = { contains: filters.assignee };
+  if (filters.companyName) where.companyName = { contains: filters.companyName };
+  if (filters.source) where.source = filters.source;
+  if (filters.includeDeleted === false) where.status = { not: 'Deleted' };
+  if (filters.q && filters.q.trim()) {
+    const q = filters.q.trim();
+    where.OR = [
+      { title: { contains: q, mode: 'insensitive' } },
+      { summary: { contains: q, mode: 'insensitive' } },
+      { companyName: { contains: q, mode: 'insensitive' } },
+      { ticketNumber: { contains: q, mode: 'insensitive' } },
+    ];
+  }
+  return where;
 }
 
 export interface CreateTicketInput {
@@ -51,20 +76,28 @@ async function companyNameFor(companyId?: number | null): Promise<string | undef
 
 export async function list(opts: TicketListOptions = {}) {
   const { page = 1, pageSize = 100, ...filters } = opts;
-  const where: Prisma.TicketWhereInput = {};
-
-  if (filters.status) where.status = filters.status;
-  if (filters.assignee) where.assignee = { contains: filters.assignee };
-  if (filters.companyName) where.companyName = { contains: filters.companyName };
-  if (filters.source) where.source = filters.source;
-
   return prisma.ticket.findMany({
-    where,
+    where: buildWhere(filters),
     orderBy: { createdAt: 'desc' },
     skip: (page - 1) * pageSize,
     take: pageSize,
     include: { assigneeUser: true },
   });
+}
+
+/** Total rows matching the same filters as list() — for server-side paging. */
+export async function count(filters: Omit<TicketListOptions, 'page' | 'pageSize'> = {}) {
+  return prisma.ticket.count({ where: buildWhere(filters) });
+}
+
+/** One round-trip: a page of tickets plus the total for the same filters. */
+export async function listPaged(opts: TicketListOptions = {}) {
+  const { page = 1, pageSize = 100, ...filters } = opts;
+  const [items, total] = await Promise.all([
+    list(opts),
+    count(filters),
+  ]);
+  return { items, total, page, pageSize };
 }
 
 export async function getById(id: number) {

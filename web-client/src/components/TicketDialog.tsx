@@ -20,6 +20,8 @@ import {
   Tooltip,
   Autocomplete,
   Divider,
+  ToggleButton,
+  ToggleButtonGroup,
 } from "@mui/material";
 import { Close } from "@mui/icons-material";
 import EditIcon from "@mui/icons-material/Edit";
@@ -33,6 +35,7 @@ import EmailIcon from "@mui/icons-material/Email";
 import { Ticket, Note } from "../interfaces";
 import EditableField from "./EditableField";
 import NotesSection from "./NotesSection";
+import RichTextEditor from "./RichTextEditor";
 import RunScriptDialog from "./RunScriptDialog";
 import * as api from "../api/client";
 import { TICKET_STATUSES, TICKET_PRIORITIES, statusColor } from "../ticketVocab";
@@ -45,9 +48,17 @@ interface TicketDialogProps {
   currentUser: any;
   /** Called after a successful edit so the parent list reflects the change. */
   onUpdated?: (field?: string) => void;
+  /** Called after the ticket's notes/timeline change (email sent, time logged). */
+  onNotesChanged?: () => void;
 }
 
-const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, notes, currentUser, onUpdated }) => {
+/** Prefill payload for the email composer (set when replying to a message). */
+interface ComposePrefill {
+  to?: string;
+  subject?: string;
+}
+
+const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, notes, currentUser, onUpdated, onNotesChanged }) => {
   const [title, setTitle] = useState(ticket.ticketTitle);
   const [priority, setPriority] = useState(ticket.priority);
   const [companyName, setCompanyName] = useState(ticket.company.CompanyName);
@@ -58,7 +69,7 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
   const [full, setFull] = useState<Record<string, any> | null>(null);
   const [jobs, setJobs] = useState<any[]>([]);
   const [mailConfigured, setMailConfigured] = useState(false);
-  const [emailOpen, setEmailOpen] = useState(false);
+  const [compose, setCompose] = useState<ComposePrefill | null>(null);
   const [assignees, setAssignees] = useState<api.Assignee[]>([]);
   const [assigneeId, setAssigneeId] = useState<number | "">("");
   const [allDevices, setAllDevices] = useState<any[]>([]);
@@ -154,6 +165,10 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
     if (ticket.localId == null || minutes <= 0) return;
     api.logTicketTime(ticket.localId, minutes, note).then(() => { reloadTime(); onUpdated?.("time"); }).catch(() => {});
   };
+  const logTimeRange = (start: string, stop: string, note?: string) => {
+    if (ticket.localId == null) return;
+    api.logTicketTimeRange(ticket.localId, start, stop, note).then(() => { reloadTime(); onUpdated?.("time"); }).catch(() => {});
+  };
 
   const saveAssignee = (id: number | "") => {
     setAssigneeId(id);
@@ -230,6 +245,10 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
                   toggleSort={() => setSortAscending((s) => !s)}
                   canEditNote={canEditNote}
                   currentUser={currentUser}
+                  onReply={mailConfigured ? (n) => setCompose({
+                    to: n.emailFrom,
+                    subject: /^re:/i.test(n.subject ?? "") ? n.subject : `Re: ${n.subject ?? title}`,
+                  }) : undefined}
                 />
               </CardContent>
             </Card>
@@ -300,7 +319,7 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
             </Card>
 
             {/* Time tracking */}
-            <TimeCard minutes={timeMinutes} entries={timeEntries} onLog={logTime} onDelete={deleteTimeEntry} onEdit={editTimeEntry} />
+            <TimeCard minutes={timeMinutes} entries={timeEntries} onLog={logTime} onLogRange={logTimeRange} onDelete={deleteTimeEntry} onEdit={editTimeEntry} />
 
             {/* Linked devices */}
             <Card sx={{ mt: 2 }}>
@@ -371,7 +390,7 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
                     )}
                     {jobs.length > 0 && <MetaRow icon={<TerminalIcon fontSize="small" />} label="Script jobs" value={`${jobs.length} run`} />}
                     {mailConfigured && (
-                      <Button size="small" startIcon={<EmailIcon />} onClick={() => setEmailOpen(true)} sx={{ alignSelf: "flex-start" }}>
+                      <Button size="small" startIcon={<EmailIcon />} onClick={() => setCompose({})} sx={{ alignSelf: "flex-start" }}>
                         Send email
                       </Button>
                     )}
@@ -385,7 +404,7 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
 
       <DialogActions>
         {mailConfigured && !hasIntegrations && (
-          <Button startIcon={<EmailIcon />} onClick={() => setEmailOpen(true)}>Email</Button>
+          <Button startIcon={<EmailIcon />} onClick={() => setCompose({})}>Email</Button>
         )}
         <Box sx={{ flexGrow: 1 }} />
         <Button onClick={onClose}>Close</Button>
@@ -401,8 +420,14 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
         />
       )}
 
-      {emailOpen && ticket.localId != null && (
-        <EmailDialog ticketId={ticket.localId} subject={`Re: ${title}`} onClose={() => setEmailOpen(false)} />
+      {compose && ticket.localId != null && (
+        <EmailDialog
+          ticketId={ticket.localId}
+          to={compose.to ?? ""}
+          subject={compose.subject ?? `Re: ${title}`}
+          onClose={() => setCompose(null)}
+          onSent={() => { onNotesChanged?.(); }}
+        />
       )}
     </Dialog>
   );
@@ -434,19 +459,44 @@ interface TimeCardProps {
   minutes: number;
   entries: any[];
   onLog: (m: number, note?: string) => void;
+  onLogRange: (start: string, stop: string, note?: string) => void;
   onDelete: (noteId: number) => void;
   onEdit: (noteId: number, minutes: number, content: string) => void;
 }
 
-function TimeCard({ minutes, entries, onLog, onDelete, onEdit }: TimeCardProps) {
+/** datetime-local value for "now", rounded to the minute, in local time. */
+function nowLocalInput(offsetMinutes = 0): string {
+  const d = new Date(Date.now() + offsetMinutes * 60000);
+  d.setSeconds(0, 0);
+  const tzAdjusted = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return tzAdjusted.toISOString().slice(0, 16);
+}
+
+function TimeCard({ minutes, entries, onLog, onLogRange, onDelete, onEdit }: TimeCardProps) {
+  const [mode, setMode] = useState<"duration" | "range">("duration");
   const [custom, setCustom] = useState("");
   const [note, setNote] = useState("");
+  const [start, setStart] = useState(nowLocalInput(-30));
+  const [stop, setStop] = useState(nowLocalInput());
   const [editing, setEditing] = useState<number | null>(null);
   const [editMin, setEditMin] = useState("");
   const presets = [15, 30, 60, 120];
 
   const startEdit = (e: any) => { setEditing(e.id); setEditMin(String(e.minutes ?? "")); };
   const commitEdit = (e: any) => { const m = Number(editMin); if (m > 0) onEdit(e.id, m, e.content); setEditing(null); };
+
+  // Live preview of the start/stop window so the duration is obvious before logging.
+  const rangeMinutes = (() => {
+    const a = new Date(start).getTime();
+    const b = new Date(stop).getTime();
+    return a && b && b > a ? Math.round((b - a) / 60000) : 0;
+  })();
+
+  const logRange = () => {
+    if (rangeMinutes <= 0) return;
+    onLogRange(new Date(start).toISOString(), new Date(stop).toISOString(), note);
+    setNote("");
+  };
 
   return (
     <Card sx={{ mt: 2 }}>
@@ -455,16 +505,52 @@ function TimeCard({ minutes, entries, onLog, onDelete, onEdit }: TimeCardProps) 
           <Typography variant="subtitle2" color="text.secondary">Time logged</Typography>
           <Typography variant="h5" sx={{ fontWeight: 700 }}>{fmtMinutes(minutes)}</Typography>
         </Stack>
-        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1, mb: 1 }}>
-          {presets.map((p) => (
-            <Button key={p} size="small" variant="outlined" onClick={() => onLog(p)}>+{fmtMinutes(p)}</Button>
-          ))}
-        </Stack>
-        <Stack direction="row" spacing={1} sx={{ mb: entries.length ? 1.5 : 0 }}>
-          <TextField size="small" label="min" type="number" value={custom} onChange={(e) => setCustom(e.target.value)} sx={{ width: 84 }} />
-          <TextField size="small" label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} sx={{ flexGrow: 1 }} />
-          <Button variant="contained" disabled={!Number(custom)} onClick={() => { onLog(Number(custom), note); setCustom(""); setNote(""); }}>Log</Button>
-        </Stack>
+
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          fullWidth
+          value={mode}
+          onChange={(_e, v) => v && setMode(v)}
+          sx={{ mb: 1.5 }}
+        >
+          <ToggleButton value="duration">Duration</ToggleButton>
+          <ToggleButton value="range">Start / Stop</ToggleButton>
+        </ToggleButtonGroup>
+
+        {mode === "duration" ? (
+          <>
+            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1, mb: 1 }}>
+              {presets.map((p) => (
+                <Button key={p} size="small" variant="outlined" onClick={() => onLog(p)}>+{fmtMinutes(p)}</Button>
+              ))}
+            </Stack>
+            <Stack direction="row" spacing={1} sx={{ mb: entries.length ? 1.5 : 0 }}>
+              <TextField size="small" label="min" type="number" value={custom} onChange={(e) => setCustom(e.target.value)} sx={{ width: 84 }} />
+              <TextField size="small" label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} sx={{ flexGrow: 1 }} />
+              <Button variant="contained" disabled={!Number(custom)} onClick={() => { onLog(Number(custom), note); setCustom(""); setNote(""); }}>Log</Button>
+            </Stack>
+          </>
+        ) : (
+          <Stack spacing={1} sx={{ mb: entries.length ? 1.5 : 0 }}>
+            <Stack direction="row" spacing={1}>
+              <TextField size="small" label="Start" type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)}
+                InputLabelProps={{ shrink: true }} sx={{ flexGrow: 1 }} />
+              <TextField size="small" label="Stop" type="datetime-local" value={stop} onChange={(e) => setStop(e.target.value)}
+                InputLabelProps={{ shrink: true }} sx={{ flexGrow: 1 }} />
+            </Stack>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Button size="small" onClick={() => setStop(nowLocalInput())}>Stop = now</Button>
+              <Chip size="small" color={rangeMinutes > 0 ? "primary" : "default"}
+                label={rangeMinutes > 0 ? fmtMinutes(rangeMinutes) : "—"} />
+              <Box sx={{ flexGrow: 1 }} />
+            </Stack>
+            <Stack direction="row" spacing={1}>
+              <TextField size="small" label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} sx={{ flexGrow: 1 }} />
+              <Button variant="contained" disabled={rangeMinutes <= 0} onClick={logRange}>Log</Button>
+            </Stack>
+          </Stack>
+        )}
         {entries.length > 0 && <Divider sx={{ mb: 1 }} />}
         <Stack spacing={0.5}>
           {entries.map((e) => (
@@ -505,19 +591,44 @@ function MetaRow({ icon, label, value }: { icon: React.ReactNode; label: string;
   );
 }
 
-function EmailDialog({ ticketId, subject, onClose }: { ticketId: number; subject: string; onClose: () => void }) {
-  const [to, setTo] = useState("");
+function EmailDialog({
+  ticketId,
+  to: initialTo,
+  subject,
+  onClose,
+  onSent,
+}: {
+  ticketId: number;
+  to: string;
+  subject: string;
+  onClose: () => void;
+  onSent?: () => void;
+}) {
+  const [to, setTo] = useState(initialTo);
+  const [cc, setCc] = useState("");
+  const [showCc, setShowCc] = useState(false);
   const [subj, setSubj] = useState(subject);
-  const [text, setText] = useState("");
+  const [html, setHtml] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [sending, setSending] = useState(false);
+
+  // TipTap reports an empty doc as "<p></p>" — treat that as no body.
+  const isEmpty = (h: string) => h.replace(/<p>\s*<\/p>/g, "").replace(/<[^>]+>/g, "").trim() === "";
 
   const send = async () => {
     setSending(true);
     setMsg(null);
     try {
-      await api.sendTicketEmail(ticketId, { to, subject: subj, text });
+      const ccList = cc.split(",").map((s) => s.trim()).filter(Boolean);
+      await api.sendTicketEmail(ticketId, {
+        to: to.split(",").map((s) => s.trim()).filter(Boolean),
+        cc: ccList.length ? ccList : undefined,
+        subject: subj,
+        html,
+      });
       setMsg({ ok: true, text: "Email sent and recorded on the ticket." });
+      onSent?.();
+      setTimeout(onClose, 600);
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });
     } finally {
@@ -526,19 +637,26 @@ function EmailDialog({ ticketId, subject, onClose }: { ticketId: number; subject
   };
 
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="sm">
+    <Dialog open onClose={onClose} fullWidth maxWidth="md">
       <DialogContent>
         <Typography variant="h6" gutterBottom>Send email from ticket</Typography>
         <Stack spacing={2} sx={{ mt: 1 }}>
           {msg && <Alert severity={msg.ok ? "success" : "error"}>{msg.text}</Alert>}
-          <TextField label="To" value={to} onChange={(e) => setTo(e.target.value)} />
-          <TextField label="Subject" value={subj} onChange={(e) => setSubj(e.target.value)} />
-          <TextField label="Message" value={text} onChange={(e) => setText(e.target.value)} multiline minRows={5} />
+          <Stack direction="row" spacing={1} alignItems="center">
+            <TextField label="To" value={to} onChange={(e) => setTo(e.target.value)} fullWidth size="small"
+              helperText="Comma-separate multiple recipients" />
+            {!showCc && <Button size="small" onClick={() => setShowCc(true)}>Cc</Button>}
+          </Stack>
+          {showCc && <TextField label="Cc" value={cc} onChange={(e) => setCc(e.target.value)} fullWidth size="small" />}
+          <TextField label="Subject" value={subj} onChange={(e) => setSubj(e.target.value)} fullWidth size="small" />
+          <RichTextEditor value={html} onChange={setHtml} />
         </Stack>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Close</Button>
-        <Button variant="contained" disabled={!to || !subj || sending} onClick={send}>Send</Button>
+        <Button variant="contained" disabled={!to.trim() || !subj.trim() || isEmpty(html) || sending} onClick={send}>
+          {sending ? "Sending…" : "Send"}
+        </Button>
       </DialogActions>
     </Dialog>
   );

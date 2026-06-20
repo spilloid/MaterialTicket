@@ -1,6 +1,6 @@
 {
   "name": "anchordesk-backend",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "main": "dist/src/index.js",
   "scripts": {
     "test": "jest",
@@ -40,6 +40,7 @@
     "openid-client": "^6.8.4",
     "otplib": "^12.0.1",
     "qrcode": "^1.5.4",
+    "sanitize-html": "^2.17.5",
     "ts-node": "^10.9.2"
   },
   "devDependencies": {
@@ -49,6 +50,7 @@
     "@types/node": "^22.5.5",
     "@types/nodemailer": "^8.0.1",
     "@types/qrcode": "^1.5.6",
+    "@types/sanitize-html": "^2.16.1",
     "eslint": "^9.10.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.2.1",

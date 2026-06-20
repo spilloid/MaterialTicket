@@ -287,19 +287,27 @@ export interface TicketFilters {
   status?: string;
   assignee?: string;
   company?: string;
+  q?: string;
   page?: number;
   pageSize?: number;
+}
+
+export interface TicketPage {
+  items: unknown[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 export function listTickets(filters: TicketFilters = {}) {
   const params = new URLSearchParams(
     Object.fromEntries(
       Object.entries(filters)
-        .filter(([, v]) => v !== undefined)
+        .filter(([, v]) => v !== undefined && v !== "")
         .map(([k, v]) => [k, String(v)])
     )
   );
-  return request<unknown[]>(`/tickets?${params}`);
+  return request<TicketPage>(`/tickets?${params}`);
 }
 
 export function getTicket(id: number) {
@@ -385,6 +393,13 @@ export function logTicketTime(ticketId: number, minutes: number, note?: string) 
   return request<unknown>(`/tickets/${ticketId}/time`, {
     method: "POST",
     body: JSON.stringify({ minutes, note }),
+  });
+}
+/** Log time from a start/stop window; the backend derives the duration. */
+export function logTicketTimeRange(ticketId: number, start: string, stop: string, note?: string) {
+  return request<unknown>(`/tickets/${ticketId}/time`, {
+    method: "POST",
+    body: JSON.stringify({ start, stop, note }),
   });
 }
 
@@ -507,11 +522,15 @@ export function listProbes() {
 }
 
 /** Returns the created probe INCLUDING its apiKey (shown once). */
-export function createProbe(data: { name: string; kind?: string; companyName?: string; cidr?: string }) {
+export function createProbe(data: { name: string; kind?: string; companyName?: string; companyId?: number | null; cidr?: string }) {
   return request<{ id: number; name: string; apiKey: string }>('/probes', {
     method: 'POST',
     body: JSON.stringify(data),
   });
+}
+
+export function updateProbe(id: number, data: { name?: string; companyName?: string; companyId?: number | null; cidr?: string }) {
+  return request<unknown>(`/probes/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 }
 
 export function deleteProbe(id: number) {

@@ -7,8 +7,16 @@ import {
   Typography,
   IconButton,
   TextField,
+  Paper,
+  Chip,
+  Button,
+  Stack,
 } from "@mui/material";
 import { ArrowDownward, ArrowUpward, Edit, Save, Undo } from "@mui/icons-material";
+import CallReceivedIcon from "@mui/icons-material/CallReceived";
+import CallMadeIcon from "@mui/icons-material/CallMade";
+import ReplyIcon from "@mui/icons-material/Reply";
+import DOMPurify from "dompurify";
 import { Note } from "../interfaces";
 
 interface NotesSectionProps {
@@ -17,6 +25,8 @@ interface NotesSectionProps {
   toggleSort: () => void;
   canEditNote: (note: Note) => boolean;
   currentUser: any;
+  /** When provided, email notes show a Reply action that opens the composer. */
+  onReply?: (note: Note) => void;
 }
 
 const NotesSection: React.FC<NotesSectionProps> = ({
@@ -24,6 +34,7 @@ const NotesSection: React.FC<NotesSectionProps> = ({
   sortAscending,
   toggleSort,
   canEditNote,
+  onReply,
 }) => {
   const [editingNotes, setEditingNotes] = useState<{ [key: string]: string }>({});
 
@@ -69,7 +80,7 @@ const NotesSection: React.FC<NotesSectionProps> = ({
           onClick={toggleSort}
           sx={{ cursor: "pointer", display: "flex", alignItems: "center" }}
         >
-          Notes
+          Activity
           {sortAscending ? (
             <ArrowUpward fontSize="small" />
           ) : (
@@ -80,70 +91,139 @@ const NotesSection: React.FC<NotesSectionProps> = ({
 
       {notes.length > 0 ? (
         <List>
-          {sortedNotes.map((note) => (
-            <ListItem key={note.id} divider>
-              <Box sx={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
-                <Box sx={{ minWidth: 150 }}>
-                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                    {new Date(note.dateCreated).toLocaleTimeString()}{" "}
-                    {new Date(note.dateCreated).toLocaleDateString()}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                    {note.authorName}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                    {note.type === "timeEntry"
-                      ? `Time: ${note.minutes != null ? `${note.minutes}m` : `${note.timeStart} - ${note.timeStop}`}`
-                      : "Note"}
-                  </Typography>
-                </Box>
-                <Box sx={{ maxWidth: "70%" }}>
-                  {editingNotes[note.id] !== undefined ? (
-                    <>
-                      <TextField
-                        multiline
-                        fullWidth
-                        variant="outlined"
-                        value={editingNotes[note.id]}
-                        onChange={(e) =>
-                          setEditingNotes((prev) => ({
-                            ...prev,
-                            [note.id]: e.target.value,
-                          }))
-                        }
-                      />
-                      <IconButton onClick={() => handleSaveNote(note.id)}>
-                        <Save />
-                      </IconButton>
-                      <IconButton onClick={() => handleRevertNote(note.id)}>
-                        <Undo />
-                      </IconButton>
-                    </>
-                  ) : (
-                    <Typography
-                      variant="body2"
-                      sx={{ whiteSpace: "pre-wrap", color: "#000" }}
-                    >
-                      {note.text}
+          {sortedNotes.map((note) =>
+            note.type === "email" ? (
+              <EmailBubble key={note.id} note={note} onReply={onReply} />
+            ) : (
+              <ListItem key={note.id} divider>
+                <Box sx={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
+                  <Box sx={{ minWidth: 150 }}>
+                    <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                      {new Date(note.dateCreated).toLocaleTimeString()}{" "}
+                      {new Date(note.dateCreated).toLocaleDateString()}
                     </Typography>
+                    <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                      {note.authorName}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                      {note.type === "timeEntry"
+                        ? `Time: ${note.minutes != null ? `${note.minutes}m` : `${note.timeStart} - ${note.timeStop}`}`
+                        : "Note"}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ maxWidth: "70%" }}>
+                    {editingNotes[note.id] !== undefined ? (
+                      <>
+                        <TextField
+                          multiline
+                          fullWidth
+                          variant="outlined"
+                          value={editingNotes[note.id]}
+                          onChange={(e) =>
+                            setEditingNotes((prev) => ({
+                              ...prev,
+                              [note.id]: e.target.value,
+                            }))
+                          }
+                        />
+                        <IconButton onClick={() => handleSaveNote(note.id)}>
+                          <Save />
+                        </IconButton>
+                        <IconButton onClick={() => handleRevertNote(note.id)}>
+                          <Undo />
+                        </IconButton>
+                      </>
+                    ) : (
+                      <Typography
+                        variant="body2"
+                        sx={{ whiteSpace: "pre-wrap", color: "text.primary" }}
+                      >
+                        {note.text}
+                      </Typography>
+                    )}
+                  </Box>
+                  {canEditNote(note) && editingNotes[note.id] === undefined && (
+                    <IconButton onClick={() => handleEditNote(note.id)}>
+                      <Edit />
+                    </IconButton>
                   )}
                 </Box>
-                {canEditNote(note) && editingNotes[note.id] === undefined && (
-                  <IconButton onClick={() => handleEditNote(note.id)}>
-                    <Edit />
-                  </IconButton>
-                )}
-              </Box>
-            </ListItem>
-          ))}
+              </ListItem>
+            )
+          )}
         </List>
       ) : (
         <Typography variant="body2" color="textSecondary">
-          No notes available for this ticket.
+          No activity yet on this ticket.
         </Typography>
       )}
     </Box>
   );
 };
+
+/** A single email rendered as a conversation bubble. Inbound mail aligns left
+ *  (neutral), outbound aligns right (accent), so a thread reads like a chat. */
+function EmailBubble({ note, onReply }: { note: Note; onReply?: (note: Note) => void }) {
+  const outbound = note.direction === "outbound";
+  const safeHtml = note.html ? DOMPurify.sanitize(note.html) : null;
+
+  return (
+    <ListItem sx={{ display: "flex", justifyContent: outbound ? "flex-end" : "flex-start", px: 0 }}>
+      <Paper
+        variant="outlined"
+        sx={{
+          maxWidth: "85%",
+          width: "fit-content",
+          p: 1.5,
+          borderRadius: 2,
+          bgcolor: outbound ? "primary.50" : "grey.50",
+          borderColor: outbound ? "primary.100" : "divider",
+        }}
+      >
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+          <Chip
+            size="small"
+            icon={outbound ? <CallMadeIcon /> : <CallReceivedIcon />}
+            label={outbound ? "Sent" : "Received"}
+            color={outbound ? "primary" : "default"}
+            variant="outlined"
+          />
+          <Typography variant="caption" color="text.secondary">
+            {new Date(note.dateCreated).toLocaleString()}
+          </Typography>
+        </Stack>
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+          <strong>From:</strong> {note.emailFrom || note.authorName}
+        </Typography>
+        {note.emailTo && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+            <strong>To:</strong> {note.emailTo}
+          </Typography>
+        )}
+        {note.subject && (
+          <Typography variant="subtitle2" sx={{ mt: 0.5 }}>
+            {note.subject}
+          </Typography>
+        )}
+        <Box sx={{ mt: 1, "& img": { maxWidth: "100%" }, "& a": { color: "primary.main" }, color: "text.primary" }}>
+          {safeHtml ? (
+            <div dangerouslySetInnerHTML={{ __html: safeHtml }} />
+          ) : (
+            <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+              {note.text}
+            </Typography>
+          )}
+        </Box>
+        {onReply && (
+          <Box sx={{ mt: 1, textAlign: "right" }}>
+            <Button size="small" startIcon={<ReplyIcon />} onClick={() => onReply(note)}>
+              Reply
+            </Button>
+          </Box>
+        )}
+      </Paper>
+    </ListItem>
+  );
+}
 
 export default NotesSection;

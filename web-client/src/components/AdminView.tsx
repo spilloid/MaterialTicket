@@ -16,6 +16,7 @@ import {
   Alert,
   CircularProgress,
   IconButton,
+  Autocomplete,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import MenuItem from "@mui/material/MenuItem";
@@ -388,16 +389,32 @@ function ProvidersPanel() {
 
 function ProbesPanel() {
   const { data, loading, error, reload } = useAsync(() => api.listProbes() as Promise<any[]>);
+  const [companies, setCompanies] = useState<api.Company[]>([]);
   const [name, setName] = useState("");
-  const [company, setCompany] = useState("");
+  const [company, setCompany] = useState<api.Company | string | null>(null);
   const [cidr, setCidr] = useState("");
   const [newKey, setNewKey] = useState<string | null>(null);
 
+  useEffect(() => {
+    api.listCompanies().then(setCompanies).catch(() => setCompanies([]));
+  }, []);
+
+  // Resolve an Autocomplete value (known Company object or free-typed string)
+  // into the {companyId, companyName} the API expects.
+  const resolveCompany = (value: api.Company | string | null) => {
+    if (!value) return { companyId: null, companyName: undefined };
+    if (typeof value === "string") {
+      const match = companies.find((c) => c.name.toLowerCase() === value.trim().toLowerCase());
+      return match ? { companyId: match.id } : { companyName: value.trim() };
+    }
+    return { companyId: value.id };
+  };
+
   const create = async () => {
     if (!name) return;
-    const probe = await api.createProbe({ name, companyName: company || undefined, cidr: cidr || undefined });
+    const probe = await api.createProbe({ name, ...resolveCompany(company), cidr: cidr || undefined });
     setNewKey(probe.apiKey);
-    setName(""); setCompany(""); setCidr("");
+    setName(""); setCompany(null); setCidr("");
     reload();
   };
 
@@ -419,7 +436,17 @@ function ProbesPanel() {
         <Typography variant="subtitle2" sx={{ mb: 1 }}>Register a netviz probe</Typography>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
           <TextField size="small" label="Name" value={name} onChange={(e) => setName(e.target.value)} />
-          <TextField size="small" label="Company" value={company} onChange={(e) => setCompany(e.target.value)} />
+          <Autocomplete
+            freeSolo
+            size="small"
+            sx={{ minWidth: 200 }}
+            options={companies}
+            getOptionLabel={(c) => (typeof c === "string" ? c : c.name)}
+            value={company}
+            onChange={(_e, v) => setCompany(v)}
+            onInputChange={(_e, v) => setCompany(v)}
+            renderInput={(params) => <TextField {...params} label="Company" placeholder="Link to a company" />}
+          />
           <TextField size="small" label="CIDR" value={cidr} onChange={(e) => setCidr(e.target.value)} placeholder="192.168.1.0/24" />
           <Button variant="contained" onClick={create} disabled={!name}>Register</Button>
         </Stack>
@@ -441,7 +468,20 @@ function ProbesPanel() {
             {(data ?? []).map((p) => (
               <TableRow key={p.id}>
                 <TableCell>{p.name}</TableCell>
-                <TableCell>{p.companyName ?? "—"}</TableCell>
+                <TableCell sx={{ minWidth: 200 }}>
+                  <Autocomplete
+                    freeSolo
+                    size="small"
+                    options={companies}
+                    getOptionLabel={(c) => (typeof c === "string" ? c : c.name)}
+                    value={companies.find((c) => c.id === p.companyId) ?? p.companyName ?? null}
+                    onChange={async (_e, v) => {
+                      await api.updateProbe(p.id, resolveCompany(v as api.Company | string | null));
+                      reload();
+                    }}
+                    renderInput={(params) => <TextField {...params} variant="standard" placeholder="—" />}
+                  />
+                </TableCell>
                 <TableCell>{p.cidr ?? "—"}</TableCell>
                 <TableCell><Chip size="small" color={statusColor(p.status) as any} label={p.status} /></TableCell>
                 <TableCell>{p.lastSeenAt ? new Date(p.lastSeenAt).toLocaleString() : "never"}</TableCell>

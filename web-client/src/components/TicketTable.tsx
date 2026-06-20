@@ -4,28 +4,38 @@ import { Ticket } from "../interfaces";
 
 interface TicketTableProps {
   tickets: Ticket[];
+  /** Total rows across all pages (server-side pagination). */
+  rowCount: number;
+  /** 0-based current page. */
+  page: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
   onRowClick: (ticket: Ticket) => void;
 }
 
-// Helper function to format date strings
 const formatDate = (dateString: string | undefined) => {
   if (!dateString) return "N/A";
   const date = new Date(dateString);
   return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
 };
 
-const TicketTable: React.FC<TicketTableProps> = ({ tickets, onRowClick }) => {
-  const columns: GridColDef[] = [
-    { field: "ticketnumber", headerName: "Ticket #", width: 150 },
-    { field: "ticketTitle", headerName: "Title", width: 300 },
-    { field: "status", headerName: "Status", width: 150 },
-    { field: "priority", headerName: "Priority", width: 150 },
-    { field: "companyName", headerName: "Company", width: 200 },
-    { field: "dateEntered", headerName: "Date Entered", width: 200 },
-  ];
+const columns: GridColDef[] = [
+  { field: "ticketnumber", headerName: "Ticket #", width: 110 },
+  { field: "ticketTitle", headerName: "Title", flex: 1, minWidth: 240 },
+  { field: "status", headerName: "Status", width: 130 },
+  { field: "priority", headerName: "Priority", width: 120 },
+  { field: "companyName", headerName: "Company", width: 200 },
+  { field: "dateEntered", headerName: "Created", width: 190 },
+];
 
-  const rows = tickets.map((ticket, idx) => ({
-    id: idx,
+/**
+ * Server-paginated, virtualized ticket table. The grid only ever holds one page
+ * of rows in the DOM; paging is driven by the parent (which re-fetches), so this
+ * scales to large ticket counts without rendering everything at once.
+ */
+const TicketTable: React.FC<TicketTableProps> = ({ tickets, rowCount, page, pageSize, onPageChange, onRowClick }) => {
+  const rows = tickets.map((ticket) => ({
+    id: (ticket as Ticket & { localId?: number }).localId ?? ticket.ticketnumber,
     ticketnumber: ticket.ticketnumber,
     ticketTitle: ticket.ticketTitle,
     status: ticket.status,
@@ -36,8 +46,19 @@ const TicketTable: React.FC<TicketTableProps> = ({ tickets, onRowClick }) => {
   }));
 
   return (
-    <div style={{ height: 400, width: "100%" }}>
-      <DataGrid rows={rows} columns={columns} onRowClick={(params) => onRowClick(params.row.ticket)} />
+    <div style={{ height: 640, width: "100%" }}>
+      <DataGrid
+        rows={rows}
+        columns={columns}
+        rowCount={rowCount}
+        paginationMode="server"
+        paginationModel={{ page, pageSize }}
+        pageSizeOptions={[pageSize]}
+        onPaginationModelChange={(model) => onPageChange(model.page)}
+        disableColumnMenu
+        onRowClick={(params) => onRowClick(params.row.ticket)}
+        sx={{ "& .MuiDataGrid-row": { cursor: "pointer" } }}
+      />
     </div>
   );
 };

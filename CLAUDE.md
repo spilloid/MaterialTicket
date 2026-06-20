@@ -9,6 +9,8 @@ Developer reference for working with this codebase. Keep this document updated a
 anchordesk is a **local-first ticketing system** built on Material UI design principles. The local PostgreSQL database is the source of truth; external systems (ConnectWise, IMAP, RMM tools) are sync adapters — not the core.
 
 > **As of 1.1.0:** the database is **PostgreSQL** (was MariaDB) — chosen for `jsonb`, full-text search, and partial indexes. Auth is first-class: **local accounts + OIDC + SAML** with **server-side sessions**, **TOTP MFA (on by default)**, and **RBAC** (admin/technician/readonly). A **Network** view renders probe-discovered devices as a radial map.
+>
+> **As of 1.6.0:** tickets are a two-way **email conversation** — HTML compose (sanitized) with RFC 5322 threading so replies stay on the ticket; inbound IMAP mail keeps its HTML. The ticket list is **server-paginated** (`GET /tickets` returns `{ items, total, page, pageSize }`, not a bare array) with server-side search/filter and a virtualized table. **Probes link to companies** via `Probe.companyId`, which flows onto discovered devices. Time entries support **duration or start/stop**. MCP gained `log_time` + `send_ticket_email`.
 
 Key design goals:
 - Excellent standalone ticketing experience first
@@ -152,7 +154,7 @@ OIDC_ISSUER_URL=https://authentik.yourdomain.com/application/o/<app-slug>/
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/tickets` | List tickets (filters: status, assignee, company, page, pageSize) |
+| GET | `/tickets` | List tickets — **paged** `{ items, total, page, pageSize }` (filters: status, assignee, company, q, page, pageSize) |
 | GET | `/tickets/search?q=` | **Postgres full-text search** (ranked) |
 | GET | `/tickets/:id` | Get one ticket with notes |
 | POST | `/tickets` | Create ticket |
@@ -163,6 +165,9 @@ OIDC_ISSUER_URL=https://authentik.yourdomain.com/application/o/<app-slug>/
 | POST | `/tickets/:id/notes` | Add note |
 | PATCH | `/tickets/:id/notes/:noteId` | Edit note |
 | DELETE | `/tickets/:id/notes/:noteId` | Delete note |
+| GET | `/tickets/:id/time` · POST | Total logged minutes / log time (duration **or** `start`+`stop`) |
+| POST | `/tickets/:id/email` | Send HTML email from the ticket — sanitized, threaded, recorded as an `email` note |
+| GET | `/mail/status` | SMTP config status for the composer (no credentials) |
 
 ### ConnectWise passthrough (requires CWM_* env vars)
 
@@ -195,6 +200,9 @@ OIDC_ISSUER_URL=https://authentik.yourdomain.com/application/o/<app-slug>/
 | `backend/src/db/pgExtras.ts` | Postgres full-text + partial indexes (ensured on boot) |
 | `backend/src/providers/TicketProvider.ts` | **Strategy interface** for external sync sources |
 | `backend/src/providers/NetVizProvider.ts` | netviz device-ingest normalizer (**owns the wire contract**) |
+| `backend/src/services/mail/MailTransport.ts` | **Strategy interface** for outbound mail (SMTP impl alongside) |
+| `backend/src/services/mail/ticketMail.ts` | Send + thread + record an email on a ticket (route delegates here) |
+| `backend/src/services/mail/threading.ts` · `sanitizeHtml.ts` | Pure RFC 5322 threading helpers · shared inbound/outbound HTML sanitizer |
 | `backend/src/routes/tickets.ts` | CRUD + full-text search for local tickets |
 | `web-client/src/api/client.ts` | Frontend API client — all fetch calls go here |
 | `web-client/src/auth/` | `AuthContext`, `LoginView`, `AccountMenu` |

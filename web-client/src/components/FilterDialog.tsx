@@ -6,177 +6,79 @@ import {
   Button,
   Autocomplete,
   TextField,
+  Stack,
 } from "@mui/material";
-import { useState, useMemo } from "react";
-import { Ticket } from "../interfaces";
+import { useEffect, useState } from "react";
+import * as api from "../api/client";
+import { TICKET_STATUSES } from "../ticketVocab";
+import type { TicketFilterCriteria } from "../App";
 
 interface FilterDialogProps {
   open: boolean;
   onClose: () => void;
-  tickets: Ticket[];
-  applyFilters: (filtered: Ticket[]) => void;
+  /** Current applied criteria (so the dialog reflects active filters). */
+  value: TicketFilterCriteria;
+  applyFilters: (criteria: TicketFilterCriteria) => void;
 }
 
-const FilterDialog: React.FC<FilterDialogProps> = ({
-  open,
-  onClose,
-  tickets,
-  applyFilters,
-}) => {
-  const [filter, setFilter] = useState({
-    ticketnumber: "",
-    ticketSummary: "",
-    priority: "",
-    status: "",
-    technicianName: "",
-    companyName: "",
-    engagementManager: "",
-    timeEntryFilter: "",
-  });
+/**
+ * Server-side ticket filters. Options come from canonical sources (status vocab,
+ * the company + assignee lists) rather than the current page, so filtering is
+ * correct regardless of which page is loaded.
+ */
+const FilterDialog: React.FC<FilterDialogProps> = ({ open, onClose, value, applyFilters }) => {
+  const [status, setStatus] = useState(value.status ?? "");
+  const [company, setCompany] = useState(value.company ?? "");
+  const [assignee, setAssignee] = useState(value.assignee ?? "");
+  const [companies, setCompanies] = useState<string[]>([]);
+  const [assignees, setAssignees] = useState<string[]>([]);
 
-  // Extract unique values for the Autocomplete options
-  const uniquePriorities = useMemo(() => [...new Set(tickets.map((t) => t.priority))], [tickets]);
-  const uniqueStatuses = useMemo(() => [...new Set(tickets.map((t) => t.status))], [tickets]);
-  const uniqueCompanies = useMemo(() => [...new Set(tickets.map((t) => t.company.CompanyName))], [tickets]);
-  const uniqueTechnicians = useMemo(() => [...new Set(tickets.map((t) =>
-    t.technician ? `${t.technician.FirstName} ${t.technician.LastName}` : ''
-  ))], [tickets]);
-  const uniqueEngagementManagers = useMemo(() => [...new Set(tickets.map((t) => t.company.PrimaryEngagementMgr))], [tickets]);
+  // Re-sync local fields whenever the dialog opens with the active criteria.
+  useEffect(() => {
+    if (!open) return;
+    setStatus(value.status ?? "");
+    setCompany(value.company ?? "");
+    setAssignee(value.assignee ?? "");
+    api.listCompanies().then((cs) => setCompanies(cs.map((c) => c.name))).catch(() => setCompanies([]));
+    api.listAssignees().then((as) => setAssignees(as.map((a) => a.displayName || a.username))).catch(() => setAssignees([]));
+  }, [open, value]);
 
-  const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFilter({
-      ...filter,
-      [e.target.name]: e.target.value,
-    });
-  };
-
-  const applyFilter = () => {
-    const filtered = tickets.filter((ticket) => {
-      try {
-        const ticketNumberMatch = new RegExp(filter.ticketnumber, "i").test(ticket.ticketnumber.toString());
-        const summaryMatch = new RegExp(filter.ticketSummary, "i").test(ticket.ticketSummary);
-        const priorityMatch = new RegExp(filter.priority, "i").test(ticket.priority);
-        const statusMatch = new RegExp(filter.status, "i").test(ticket.status);
-        const technicianMatch = ticket.technician
-          ? new RegExp(filter.technicianName, "i").test(`${ticket.technician.FirstName} ${ticket.technician.LastName}`)
-          : false;
-        const companyMatch = new RegExp(filter.companyName, "i").test(ticket.company.CompanyName);
-        const engagementManagerMatch = new RegExp(filter.engagementManager, "i").test(ticket.company.PrimaryEngagementMgr);
-
-        const timeEntryMatch =
-          filter.timeEntryFilter === ""
-            ? true
-            : ticket.timeEntries?.some((entry) =>
-                new RegExp(filter.timeEntryFilter, "i").test(`${entry.TimeStart} ${entry.TimeStop} ${entry.TimeNote}`)
-              ) || false;
-
-        return (
-          ticketNumberMatch &&
-          summaryMatch &&
-          priorityMatch &&
-          statusMatch &&
-          technicianMatch &&
-          companyMatch &&
-          engagementManagerMatch &&
-          timeEntryMatch
-        );
-      } catch (err) {
-        console.error("Error applying filters: ", err);
-        return false;
-      }
-    });
-
-    applyFilters(filtered);
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      applyFilter();
-    }
-  };
+  const apply = () => applyFilters({ status: status || undefined, company: company || undefined, assignee: assignee || undefined });
+  const clear = () => { setStatus(""); setCompany(""); setAssignee(""); applyFilters({}); };
 
   return (
-    <Dialog open={open} onClose={onClose} onKeyPress={handleKeyPress}>
-      <DialogTitle>Filter Tickets</DialogTitle>
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
+      <DialogTitle>Filter tickets</DialogTitle>
       <DialogContent>
-        <TextField
-          margin="dense"
-          name="ticketnumber"
-          label="Ticket Number"
-          fullWidth
-          value={filter.ticketnumber}
-          onChange={handleFilterChange}
-        />
-        <TextField
-          margin="dense"
-          name="ticketSummary"
-          label="Ticket Summary"
-          fullWidth
-          value={filter.ticketSummary}
-          onChange={handleFilterChange}
-        />
-
-        {/* Autocomplete for Priority */}
-        <Autocomplete
-          options={uniquePriorities}
-          getOptionLabel={(option) => option}
-          value={filter.priority}
-          onChange={(_e, value) => setFilter({ ...filter, priority: value || "" })}
-          renderInput={(params) => <TextField {...params} label="Priority" fullWidth />}
-        />
-
-        {/* Autocomplete for Status */}
-        <Autocomplete
-          options={uniqueStatuses}
-          getOptionLabel={(option) => option}
-          value={filter.status}
-          onChange={(_e, value) => setFilter({ ...filter, status: value || "" })}
-          renderInput={(params) => <TextField {...params} label="Status" fullWidth />}
-        />
-
-        {/* Autocomplete for Technician */}
-        <Autocomplete
-          options={uniqueTechnicians}
-          getOptionLabel={(option) => option}
-          value={filter.technicianName}
-          onChange={(_e, value) => setFilter({ ...filter, technicianName: value || "" })}
-          renderInput={(params) => <TextField {...params} label="Technician Name" fullWidth />}
-        />
-
-        {/* Autocomplete for Company Name */}
-        <Autocomplete
-          options={uniqueCompanies}
-          getOptionLabel={(option) => option}
-          value={filter.companyName}
-          onChange={(_e, value) => setFilter({ ...filter, companyName: value || "" })}
-          renderInput={(params) => <TextField {...params} label="Company Name" fullWidth />}
-        />
-
-        {/* Autocomplete for Engagement Manager */}
-        <Autocomplete
-          options={uniqueEngagementManagers}
-          getOptionLabel={(option) => option}
-          value={filter.engagementManager}
-          onChange={(_e, value) => setFilter({ ...filter, engagementManager: value || "" })}
-          renderInput={(params) => <TextField {...params} label="Engagement Manager" fullWidth />}
-        />
-
-        <TextField
-          margin="dense"
-          name="timeEntryFilter"
-          label="Time Entry Info"
-          fullWidth
-          value={filter.timeEntryFilter}
-          onChange={handleFilterChange}
-          helperText="Filter by time entry details like TimeStart, TimeStop, or Notes."
-        />
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          <Autocomplete
+            options={TICKET_STATUSES}
+            value={status || null}
+            onChange={(_e, v) => setStatus(v ?? "")}
+            renderInput={(params) => <TextField {...params} label="Status" />}
+          />
+          <Autocomplete
+            freeSolo
+            options={companies}
+            value={company || null}
+            onChange={(_e, v) => setCompany(v ?? "")}
+            onInputChange={(_e, v) => setCompany(v)}
+            renderInput={(params) => <TextField {...params} label="Company" />}
+          />
+          <Autocomplete
+            freeSolo
+            options={assignees}
+            value={assignee || null}
+            onChange={(_e, v) => setAssignee(v ?? "")}
+            onInputChange={(_e, v) => setAssignee(v)}
+            renderInput={(params) => <TextField {...params} label="Assignee" />}
+          />
+        </Stack>
       </DialogContent>
       <DialogActions>
+        <Button onClick={clear} color="inherit">Clear</Button>
         <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={applyFilter} variant="contained" color="primary">
-          Apply Filters
-        </Button>
+        <Button onClick={apply} variant="contained">Apply</Button>
       </DialogActions>
     </Dialog>
   );

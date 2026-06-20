@@ -25,10 +25,17 @@ export interface Note {
   text: string;
   authorId: string;
   authorName: string;
-  type: "note" | "timeEntry";
+  type: "note" | "timeEntry" | "email";
   timeStart?: string;
   timeStop?: string;
   minutes?: number;
+  // Email correspondence metadata (type === "email").
+  direction?: "inbound" | "outbound";
+  html?: string;
+  emailFrom?: string;
+  emailTo?: string;
+  emailCc?: string;
+  subject?: string;
 }
 
 export interface Ticket {

@@ -38,6 +38,15 @@ export async function probeRoutes(server: FastifyInstance) {
     return reply.status(201).send(probe); // includes apiKey
   });
 
+  // Update a probe — primarily to associate it with a Company (which then flows
+  // to its discovered devices on the next ingest).
+  server.patch<{ Params: IdParam }>('/probes/:id', { preHandler: requireRole('admin') }, async (req, reply) => {
+    const body = (req.body ?? {}) as probeRepo.UpdateProbeInput;
+    const probe = await probeRepo.update(parseInt(req.params.id), body, req.actorSub);
+    if (!probe) return reply.status(404).send({ error: 'Probe not found' });
+    return reply.send(probe);
+  });
+
   server.delete<{ Params: IdParam }>('/probes/:id', { preHandler: requireRole('admin') }, async (req, reply) => {
     const probe = await probeRepo.remove(parseInt(req.params.id), req.actorSub);
     if (!probe) return reply.status(404).send({ error: 'Probe not found' });
@@ -88,6 +97,7 @@ export async function probeRoutes(server: FastifyInstance) {
             openPorts: ext.openPorts,
             status: ext.status,
             companyName: ext.companyName ?? probe.companyName ?? undefined,
+            companyId: probe.companyId ?? undefined,
             source: 'netviz',
             probeId: probe.id,
             firstSeenAt: ext.firstSeenAt,

@@ -7,17 +7,22 @@ interface IdParam { id: string }
 interface NoteIdParam { id: string; noteId: string }
 
 export async function ticketRoutes(server: FastifyInstance) {
-  // List tickets with optional filtering
+  // List tickets with optional filtering + server-side pagination. Returns
+  // { items, total, page, pageSize } so the client can page without loading
+  // the whole table. pageSize is capped to keep one request bounded.
   server.get('/tickets', async (req: FastifyRequest, reply: FastifyReply) => {
     const query = req.query as Record<string, string>;
-    const tickets = await ticketRepo.list({
+    const pageSize = Math.min(query.pageSize ? parseInt(query.pageSize) : 50, 200);
+    const result = await ticketRepo.listPaged({
       status: query.status,
       assignee: query.assignee,
       companyName: query.company,
+      q: query.q,
+      includeDeleted: query.includeDeleted === 'true',
       page: query.page ? parseInt(query.page) : 1,
-      pageSize: query.pageSize ? parseInt(query.pageSize) : 100,
+      pageSize,
     });
-    return reply.send(tickets);
+    return reply.send(result);
   });
 
   // Full-text search (Postgres). Static route — registered before /tickets/:id.
@@ -113,17 +118,34 @@ export async function ticketRoutes(server: FastifyInstance) {
   });
 
   // Log time: a time_entry note carrying a duration (minutes) + optional note.
-  // Easy by design — just a duration; start/stop is optional metadata.
+  // Two entry modes, both end up as canonical `minutes`:
+  //  - duration: pass `minutes` directly (quick presets / manual minutes)
+  //  - start/stop: pass `start` + `stop` ISO timestamps; minutes is derived and
+  //    the raw window is preserved in timeStart/timeStop.
   server.post('/tickets/:id/time', async (req: FastifyRequest<{ Params: IdParam }>, reply: FastifyReply) => {
-    const body = (req.body ?? {}) as { minutes?: number; note?: string };
-    const minutes = Math.round(Number(body.minutes));
-    if (!minutes || minutes <= 0) return reply.status(400).send({ error: 'minutes must be a positive number' });
+    const body = (req.body ?? {}) as { minutes?: number; note?: string; start?: string; stop?: string };
+
+    let minutes = Math.round(Number(body.minutes));
+    let timeStart: Date | undefined;
+    let timeStop: Date | undefined;
+
+    if (body.start && body.stop) {
+      timeStart = new Date(body.start);
+      timeStop = new Date(body.stop);
+      if (isNaN(timeStart.getTime()) || isNaN(timeStop.getTime())) {
+        return reply.status(400).send({ error: 'start and stop must be valid timestamps' });
+      }
+      if (timeStop <= timeStart) return reply.status(400).send({ error: 'stop must be after start' });
+      minutes = Math.round((timeStop.getTime() - timeStart.getTime()) / 60000);
+    }
+
+    if (!minutes || minutes <= 0) return reply.status(400).send({ error: 'provide a positive duration (minutes or start/stop)' });
 
     const author = req.user?.displayName ?? req.actorSub;
     const content = body.note?.trim() || `Logged ${minutes} min`;
     const note = await noteRepo.create(
       parseInt(req.params.id),
-      { content, author, authorId: req.user?.id || undefined, noteType: 'time_entry', minutes },
+      { content, author, authorId: req.user?.id || undefined, noteType: 'time_entry', minutes, timeStart, timeStop },
       req.actorSub
     );
     return reply.status(201).send(note);

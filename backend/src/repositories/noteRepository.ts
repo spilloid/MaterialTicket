@@ -11,6 +11,14 @@ export interface CreateNoteInput {
   timeStop?: Date;
   minutes?: number;
   externalId?: string;
+  // Email correspondence metadata (noteType = 'email').
+  direction?: 'inbound' | 'outbound';
+  htmlContent?: string;
+  emailFrom?: string;
+  emailTo?: string;
+  emailCc?: string;
+  subject?: string;
+  inReplyTo?: string;
 }
 
 export interface UpdateNoteInput {
@@ -46,6 +54,13 @@ export async function create(ticketId: number, input: CreateNoteInput, actorSub:
       timeStop: input.timeStop,
       minutes: input.minutes,
       externalId: input.externalId,
+      direction: input.direction,
+      htmlContent: input.htmlContent,
+      emailFrom: input.emailFrom,
+      emailTo: input.emailTo,
+      emailCc: input.emailCc,
+      subject: input.subject,
+      inReplyTo: input.inReplyTo,
     },
   });
 

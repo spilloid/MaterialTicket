@@ -16,6 +16,11 @@ export interface OutboundMail {
   html?: string;
   cc?: string[];
   replyTo?: string;
+  /** RFC 5322 threading headers. Set these so the recipient's reply threads back
+   *  onto the same ticket (their In-Reply-To points at our messageId). */
+  messageId?: string;
+  inReplyTo?: string;
+  references?: string[];
 }
 
 export interface MailTransport {

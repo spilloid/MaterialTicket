@@ -5,22 +5,25 @@ import { z } from 'zod';
 import * as tickets from '../repositories/ticketRepository';
 import * as notes from '../repositories/noteRepository';
 import * as audit from '../repositories/auditRepository';
+import * as ticketMail from '../services/mail/ticketMail';
+import { mailTransport } from '../services/mail/SmtpMailTransport';
 
 function buildMcpServer(): McpServer {
   const server = new McpServer({ name: 'anchordesk', version: '1.0.0' });
 
   server.tool(
     'list_tickets',
-    'List tickets with optional filters. Returns paginated results.',
+    'List tickets with optional filters. Returns { items, total, page, pageSize } so you can page through large result sets.',
     {
       status: z.string().optional().describe('Filter by status, e.g. "Open", "Closed"'),
       assignee: z.string().optional().describe('Filter by assignee name'),
       companyName: z.string().optional().describe('Filter by company name'),
+      q: z.string().optional().describe('Free-text search across title, summary, company, ticket number'),
       page: z.number().int().min(1).optional().default(1),
       pageSize: z.number().int().min(1).max(100).optional().default(20),
     },
     async (args) => {
-      const result = await tickets.list(args);
+      const result = await tickets.listPaged(args);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     },
   );
@@ -88,6 +91,70 @@ function buildMcpServer(): McpServer {
       const changedBy = (extra?.authInfo as { sub?: string } | undefined)?.sub ?? 'mcp';
       const note = await notes.create(ticketId, { content, author, noteType: 'note' }, changedBy);
       return { content: [{ type: 'text', text: JSON.stringify(note, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'log_time',
+    'Log billable time on a ticket, either as a duration (minutes) or a start/stop window.',
+    {
+      ticketId: z.number().int(),
+      minutes: z.number().int().positive().optional().describe('Duration in minutes (omit if using start/stop)'),
+      start: z.string().optional().describe('ISO timestamp; with `stop`, duration is derived'),
+      stop: z.string().optional().describe('ISO timestamp'),
+      note: z.string().optional().describe('Optional note for the entry'),
+      author: z.string().optional().default('MCP Agent'),
+    },
+    async ({ ticketId, minutes, start, stop, note, author }, extra) => {
+      const changedBy = (extra?.authInfo as { sub?: string } | undefined)?.sub ?? 'mcp';
+      let mins = minutes ?? 0;
+      let timeStart: Date | undefined;
+      let timeStop: Date | undefined;
+      if (start && stop) {
+        timeStart = new Date(start);
+        timeStop = new Date(stop);
+        if (isNaN(timeStart.getTime()) || isNaN(timeStop.getTime()) || timeStop <= timeStart) {
+          return { content: [{ type: 'text', text: 'Invalid start/stop window' }], isError: true };
+        }
+        mins = Math.round((timeStop.getTime() - timeStart.getTime()) / 60000);
+      }
+      if (!mins || mins <= 0) {
+        return { content: [{ type: 'text', text: 'Provide a positive duration (minutes or start/stop)' }], isError: true };
+      }
+      const entry = await notes.create(
+        ticketId,
+        { content: note?.trim() || `Logged ${mins} min`, author, noteType: 'time_entry', minutes: mins, timeStart, timeStop },
+        changedBy,
+      );
+      return { content: [{ type: 'text', text: JSON.stringify(entry, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'send_ticket_email',
+    'Send an HTML/plain email from a ticket. The message is threaded and recorded on the ticket timeline as an email note.',
+    {
+      ticketId: z.number().int(),
+      to: z.union([z.string(), z.array(z.string())]).describe('Recipient address(es)'),
+      cc: z.array(z.string()).optional(),
+      subject: z.string(),
+      html: z.string().optional().describe('HTML body (sanitized server-side)'),
+      text: z.string().optional().describe('Plain-text body; derived from html when omitted'),
+      author: z.string().optional().default('MCP Agent'),
+    },
+    async ({ ticketId, to, cc, subject, html, text, author }) => {
+      if (!html && !text) {
+        return { content: [{ type: 'text', text: 'Provide an html or text body' }], isError: true };
+      }
+      if (!(await mailTransport.isConfigured())) {
+        return { content: [{ type: 'text', text: 'SMTP is not configured' }], isError: true };
+      }
+      try {
+        const { messageId } = await ticketMail.sendTicketEmail(ticketId, { to, cc, subject, html, text, author });
+        return { content: [{ type: 'text', text: JSON.stringify({ ok: true, messageId }, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: 'text', text: (err as Error).message }], isError: true };
+      }
     },
   );
 

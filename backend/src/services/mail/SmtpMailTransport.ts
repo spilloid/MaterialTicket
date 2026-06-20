@@ -40,6 +40,9 @@ export class SmtpMailTransport implements MailTransport {
       subject: mail.subject,
       text: mail.text,
       html: mail.html,
+      messageId: mail.messageId,
+      inReplyTo: mail.inReplyTo,
+      references: mail.references,
     });
     return { messageId: info.messageId };
   }
