@@ -1,13 +1,14 @@
 <div align="center">
 
-# anchordesk
-<img width="1448" height="1086" alt="image" src="https://github.com/user-attachments/assets/da07a6e2-6b5b-4eaf-8620-e1243ab60f4c" />
+# AnchorDesk
+
+<img width="1448" height="1086" alt="AnchorDesk ticket dashboard" src="https://github.com/user-attachments/assets/da07a6e2-6b5b-4eaf-8620-e1243ab60f4c" />
 
 **A local-first ticketing platform for MSPs and IT teams — that also sees and acts on the machines behind the tickets.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/release-v1.1.0-6750A4.svg)](https://github.com/spilloid/anchordesk/releases)
-[![Build images](https://github.com/spilloid/anchordesk/actions/workflows/publish-images.yml/badge.svg)](https://github.com/spilloid/anchordesk/actions/workflows/publish-images.yml)
+[![Release](https://img.shields.io/github/v/release/spilloid/AnchorDesk?color=6750A4)](https://github.com/spilloid/AnchorDesk/releases)
+[![Build images](https://github.com/spilloid/AnchorDesk/actions/workflows/publish-images.yml/badge.svg)](https://github.com/spilloid/AnchorDesk/actions/workflows/publish-images.yml)
 [![Stack](https://img.shields.io/badge/stack-React%20·%20Fastify%20·%20Prisma%20·%20PostgreSQL-555.svg)](#architecture)
 
 [**Website**](https://spilloid.github.io/AnchorDesk/) · [Quickstart](#quickstart) · [Architecture](#architecture) · [API](#api) · [Docs](docs/)
@@ -18,125 +19,153 @@
 
 ## What it is
 
-**anchordesk** is a self-hosted ticketing system where your **local PostgreSQL database is the source of truth**. External platforms — ConnectWise Manage, IMAP mailboxes, RMM tools — are *sync adapters* that feed into the local store, not the core. Run it completely standalone, or wire in as many integrations as you need; the product works the same either way.
+**AnchorDesk** is a self-hosted ticketing system where your **local PostgreSQL database is the source of truth**. External platforms — ConnectWise Manage, IMAP mailboxes, network probes, and RMM tools — feed the local store without becoming a hard dependency. Run it standalone, then connect the pieces of your stack you actually use.
 
-What sets it apart from a plain helpdesk: tickets are linked to the **devices** they're about (discovered by network probes, visualized as a live network map) and you can **run scripts** against those devices through your RMM, all from the ticket. Every mutation — to a ticket, note, device, or probe — appends to an **append-only audit log**, giving you full revision history and attribution out of the box.
+What sets it apart from a plain helpdesk: each ticket can become an operations cockpit. Link the **devices** involved, inspect their source and status, run Tactical RMM scripts, send email, and keep the resulting activity on the ticket. Core changes are recorded in an **append-only audit log** with actor and before/after data.
 
-## Highlights
+## What ships in v1.2.0
 
-- **🎫 Local-first ticketing** — full CRUD, statuses, priorities, assignees, time entries, a Kanban board, and Postgres full-text search. No external dependency required.
-- **🔐 Flexible auth + RBAC** — local accounts, OIDC SSO (Azure AD, Authentik, Okta…), and SAML 2.0 run side by side. **TOTP MFA on by default**, three roles (admin / technician / readonly) enforced on every route, all managed from the Admin UI or seeded from env.
-- **📝 Full audit trail** — every change writes a before/after snapshot to an append-only log. Per-ticket history, who-changed-what, compliance-ready.
-- **🖥️ Device inventory + Network map** — LAN probes (e.g. [netviz](#probes--devices)) push discovered devices; a **Network view** renders them as a radial map (online/offline, open ports), and you can link them to tickets.
-- **⚡ Act on machines** — queue and schedule scripts against devices through your RMM (Tactical RMM today) directly from a ticket.
-- **🔌 Pluggable sync** — a Strategy/Repository/Factory boundary makes ConnectWise, IMAP-to-ticket, and RMM runners drop-in. Adding one is a new class, not a rewrite.
-- **🤖 MCP server** — a built-in [Model Context Protocol](https://modelcontextprotocol.io) endpoint lets agents like Claude Code read and manage tickets.
-- **📦 Ship anywhere** — Docker Compose for local/production, Kubernetes manifests, and prebuilt images on GHCR.
+- **🎫 Local-first ticketing** — create and edit tickets, assign technicians, manage notes, filter views, use card/table/Kanban layouts, and search ticket text through the API.
+- **🧰 Ticket cockpit** — a two-column ticket view with status, priority, source, assignee picker, activity timeline, linked devices, script jobs, and outbound email when configured.
+- **📥 Email-to-ticket** — poll one or more IMAP mailboxes, create tickets from new messages, and thread replies into existing tickets by `In-Reply-To` and `References`.
+- **📤 Ticket email** — send through SMTP from inside a ticket; sent messages are recorded as notes on the activity timeline.
+- **🧭 Admin console** — live ticket/device/probe/user/mailbox counts, recent activity, user and auth management, integration settings, mailbox management, inventory, and an audit-log viewer.
+- **🔐 Auth + RBAC** — local accounts, OIDC, and SAML 2.0 can run side by side. TOTP MFA is required by default for local accounts, with `admin`, `technician`, and `readonly` roles.
+- **🖥️ Device inventory + network map** — ingest devices from [netviz](#probes--devices), sync them from Tactical RMM, or add them manually; group the radial map by probe or company and link devices to tickets.
+- **⚡ Tactical RMM actions** — sync devices, browse the Tactical script catalog, run scripts now or schedule them, and retain job status/output.
+- **🔄 ConnectWise ingestion** — incrementally import ConnectWise Manage tickets and notes into the local database with provider status and sync logs. This is inbound sync, not two-way writeback.
+- **📝 Audit history** — ticket, note, device, user, mailbox, and other managed-record changes append actor-attributed history; admins can browse recent events across entities.
+- **🤖 MCP server** — built-in [Model Context Protocol](https://modelcontextprotocol.io) tools let authenticated agents list, read, create, and update tickets, add notes, and inspect ticket history.
+- **📦 Self-hosting included** — Docker Compose, Kubernetes manifests, and tagged backend/web images on GHCR.
 
 ## Architecture
 
-```
+```text
 web-client (React + MUI)
      │  /api/* + /mcp proxied to backend
      ▼
 backend (Fastify + TypeScript)
-     │  Prisma ORM   ·   auth (local/OIDC/SAML + sessions + RBAC)   ·   MCP server
+     │  Prisma ORM · local/OIDC/SAML auth · RBAC · schedulers · MCP server
      ▼
-PostgreSQL  ← source of truth (tickets, notes, audit_log, users, sessions, devices, probes, script_jobs)
+PostgreSQL  ← source of truth (tickets, notes, audit, users, devices, mailboxes, script jobs)
      ▲
-     │  sync adapters (Strategy pattern)
-     ├── ConnectWiseProvider   (CW Manage)
+     │  adapters and pollers
+     ├── ConnectWiseProvider   (inbound tickets + notes)
      ├── NetVizProvider        (probe → device ingest)
-     ├── TacticalRmmProvider   (device sync + script runner)
-     └── ImapProvider / mail   (email → ticket)
+     ├── Tactical RMM          (device sync + script runner)
+     └── IMAP / SMTP           (email-to-ticket + outbound mail)
 ```
 
 Design patterns at the integration boundary:
 
 - **Strategy** — `TicketProvider`, `DeviceProvider`, and `ScriptRunner` interfaces (`backend/src/providers/`, `backend/src/runners/`).
-- **Repository** — `backend/src/repositories/` wraps all Prisma queries; routes never touch Prisma directly.
-- **Observer (append-only log)** — every mutation flows through `auditRepository.record()` before responding.
+- **Repository** — `backend/src/repositories/` wraps Prisma queries for the application routes.
+- **Append-only audit log** — repositories record managed-record changes with actor and before/after values.
 
 See [docs/architecture.md](docs/architecture.md) for the full diagram and rationale.
 
 ## Quickstart
 
-**Prerequisites:** Node.js ≥ 18, Docker + Docker Compose.
+**Prerequisites:** Node.js 18+ and Docker with Compose.
 
-```bash
-# 1. Start the database (Postgres + Adminer DB browser on :8081)
-docker compose up -d db adminer
+Create a root `.env` for Compose:
 
-# 2. Configure the backend
-cp backend/.env.example backend/.env
-# edit backend/.env — set DATABASE_URL and OIDC_DISABLED=true for local dev
-# (for a real login: set AUTH_SESSION_SECRET + BOOTSTRAP_ADMIN_PASSWORD instead)
-
-# 3. Push the schema
-cd backend && npx prisma db push
-
-# 4. Run backend + frontend (two terminals)
-cd backend && npm install && npm start          # :8060
-cd web-client && npm install && npm run dev      # :5173
+```dotenv
+DB_NAME=anchordesk
+DB_USER=mtapp
+DB_PASSWORD=change-me
 ```
 
-Open **http://localhost:5173** — all `/api/*` requests proxy to the backend.
+Then start the database and configure the backend:
 
-For a production-like full stack: `docker compose up --build`. Prebuilt images are published to GHCR on every tagged release (`ghcr.io/spilloid/anchordesk-backend`, `-web-client`).
+```bash
+# PostgreSQL + Adminer DB browser (:8081)
+docker compose up -d db adminer
+
+# Backend configuration
+cp backend/.env.example backend/.env
+# Match DATABASE_URL to the Compose values above:
+# postgresql://mtapp:change-me@localhost:5432/anchordesk
+# For quick local development, set OIDC_DISABLED=true.
+# For a real login, set AUTH_SESSION_SECRET, ENCRYPTION_KEY,
+# and BOOTSTRAP_ADMIN_PASSWORD instead.
+
+# Install dependencies and push the schema
+cd backend
+npm install
+npx prisma db push
+```
+
+Run the backend and frontend in separate terminals:
+
+```bash
+cd backend && npm start                       # :8060
+cd web-client && npm install && npm run dev   # :5173
+```
+
+Open **http://localhost:5173** — `/api/*`, `/probe/*`, and `/mcp/*` are proxied to the backend.
+
+For the complete Compose stack, run `docker compose up --build`. Tagged release images are published as:
+
+- `ghcr.io/spilloid/anchordesk-backend:1.2.0`
+- `ghcr.io/spilloid/anchordesk-web-client:1.2.0`
 
 ## Configuration
 
-Auth and integrations are driven by environment variables — see [backend/.env.example](backend/.env.example).
+See [backend/.env.example](backend/.env.example) for the complete backend configuration. Auth and integration environment variables seed the database; edits made later in the Admin UI take precedence.
 
 | Variable | Required | Description |
 |---|---|---|
 | `DATABASE_URL` | Yes | `postgresql://user:pass@host:5432/anchordesk` |
-| `APP_BASE_URL` | Prod | Public URL — builds OIDC/SAML callbacks |
-| `AUTH_SESSION_SECRET` | Prod | Signs session cookies (`openssl rand -hex 32`) |
+| `APP_BASE_URL` | Production | Public URL used to build OIDC/SAML callbacks |
+| `AUTH_SESSION_SECRET` | Production | Signs session cookies (`openssl rand -hex 32`) |
+| `ENCRYPTION_KEY` | Production | 64 hex characters used for AES-256-GCM encryption of stored mailbox passwords |
 | `BOOTSTRAP_ADMIN_PASSWORD` | First boot | Creates the first local admin when the users table is empty |
 | `MFA_REQUIRED` | Optional | TOTP MFA for local accounts — **on by default** |
-| `OIDC_ISSUER_URL` / `OIDC_CLIENT_ID` | Optional | OIDC SSO (Azure AD, Authentik, Okta…) |
+| `OIDC_ISSUER_URL` / `OIDC_CLIENT_ID` | Optional | OIDC SSO (Azure AD, Authentik, Okta, and other compliant IdPs) |
 | `SAML_ENTRY_POINT` / `SAML_IDP_CERT` | Optional | SAML 2.0 SSO |
-| `OIDC_DISABLED` | Dev only | Set `true` to skip auth entirely (every request = dev admin) |
-| `CWM_*` | Optional | ConnectWise Manage sync |
-| `TRMM_*` | Optional | Tactical RMM device sync + script runner |
-| `SMTP_* / IMAP_*` | Optional | Outbound mail / email-to-ticket |
+| `OIDC_DISABLED` | Development only | Set `true` to bypass auth as the development admin |
+| `CWM_*` | Optional | Seeds ConnectWise Manage credentials |
+| `TRMM_*` | Optional | Seeds Tactical RMM device sync and script runner credentials |
+| `SMTP_*` | Optional | Seeds outbound SMTP settings; IMAP mailboxes are created in Admin → Mailboxes |
 
-Auth methods can also be configured **after first boot from Admin → Authentication** — env vars seed the initial config, the DB row wins afterward.
+Auth methods can be configured after first boot from **Admin → Authentication**. SMTP, ConnectWise, and Tactical RMM can be managed from **Admin → Integrations**. Secrets are write-only in API responses.
 
 ## API
 
-Local tickets (the source of truth) live under `/tickets`; integrations are namespaced.
+Local tickets are the source of truth. Integrations ingest into or act on those local records.
 
 | Area | Routes |
 |---|---|
-| **Auth** | `POST /auth/login`, `/auth/mfa/*` (TOTP), `/auth/oidc/*`, `/auth/saml/*`, `GET /auth/me`, `POST /auth/logout` |
-| **Admin** | `GET/POST/PATCH/DELETE /users`, `GET/PATCH /auth/settings` (admin role) |
-| **Tickets** | `GET/POST /tickets`, `GET /tickets/search?q=` (full-text), `GET/PATCH/DELETE /tickets/:id`, `GET /tickets/:id/history`, notes under `/tickets/:id/notes` |
-| **Devices** | `GET /devices`, `GET /devices/:id`, link/unlink to tickets |
-| **Probes** | `POST /probes` (register, returns one-time API key), `POST /probe/heartbeat`, `POST /probe/devices` (ingest) |
-| **Scripts** | queue / schedule script jobs against a device's RMM |
-| **Mail** | inbound email → ticket, outbound notifications |
-| **ConnectWise** | `/cw/tickets/*` passthrough |
-| **MCP** | `/mcp` — Model Context Protocol server |
+| **Auth** | `POST /auth/login`, `/auth/mfa/*`, `/auth/oidc/*`, `/auth/saml/*`, `GET /auth/me`, `POST /auth/logout` |
+| **Admin** | `/admin/overview`, `/admin/audit`, user CRUD, auth settings, integration settings, and mailbox CRUD/polling |
+| **Tickets** | `GET/POST /tickets`, `GET /tickets/search?q=`, `GET/PATCH/DELETE /tickets/:id`, ticket history, and notes |
+| **Devices** | Device CRUD/history plus ticket link/unlink routes |
+| **Probes** | `POST /probes`, `POST /probe/heartbeat`, and `POST /probe/devices` |
+| **Scripts** | Tactical catalog, device sync, immediate/scheduled jobs, and job history |
+| **Mail** | SMTP status and `POST /tickets/:id/email`; IMAP polling is managed under `/mailboxes` |
+| **Sync** | Provider list/status, inbound sync runs, and sync logs; legacy read-only `/cw/tickets/*` routes remain available |
+| **MCP** | SSE transport at `/mcp/sse` with client messages at `/mcp/messages` |
 | **Health** | `GET /ping` → `pong` |
 
-Probes authenticate with an `X-Probe-Key` API key and are auth-exempt; everything else requires a **session cookie** (browser login) or an **OIDC bearer token** (API clients), unless `OIDC_DISABLED`. Routes are gated by role: `readonly` can read but not mutate, and admin-only surfaces (users, auth settings, probes, sync) require the `admin` role.
+Probes authenticate with an `X-Probe-Key` API key and are exempt from browser auth. Other routes require a session cookie or OIDC bearer token unless `OIDC_DISABLED=true`. `readonly` users cannot mutate data, and sensitive administration and sync operations require the `admin` role.
 
 ## Probes & devices
 
-A probe is a scanner deployed on a customer LAN that pushes discovered devices into anchordesk. The reference probe is [netviz](https://github.com/Spillers-Technology/netviz). An admin registers a probe (Admin → Probes, or `POST /probes`) and receives an API key once; the probe heartbeats and posts device records, which are upserted into the local `devices` table, rendered in the **Network** view, and can be linked to tickets. The wire contract lives in [backend/src/providers/NetVizProvider.ts](backend/src/providers/NetVizProvider.ts) (contract v1).
+A probe is a scanner deployed on a customer LAN that pushes discovered devices into AnchorDesk. The reference probe is [netviz](https://github.com/Spillers-Technology/netviz). An admin registers a probe from **Admin → Probes** (or `POST /probes`) and receives its API key once. The probe then heartbeats and posts device records, which are upserted locally, displayed in the **Network** view, and available to link to tickets.
+
+The wire contract lives in [backend/src/providers/NetVizProvider.ts](backend/src/providers/NetVizProvider.ts).
 
 ## Documentation
 
-- [docs/architecture.md](docs/architecture.md) — patterns, request lifecycle, auth
+- [docs/architecture.md](docs/architecture.md) — patterns, request lifecycle, and auth
 - [docs/schema.md](docs/schema.md) — database schema
-- [docs/providers.md](docs/providers.md) — how to add a sync provider
-- [CLAUDE.md](CLAUDE.md) — full developer reference
+- [docs/providers.md](docs/providers.md) — adding a sync provider
+- [CLAUDE.md](CLAUDE.md) — developer reference
 
 ## Contributing
 
-Issues and PRs welcome. New sync integrations should implement the relevant Strategy interface and route all DB access through a repository — see [docs/providers.md](docs/providers.md).
+Issues and PRs are welcome. New integrations should implement the relevant strategy interface and keep data access behind repositories; see [docs/providers.md](docs/providers.md).
 
 ## License
 
