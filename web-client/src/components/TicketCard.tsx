@@ -1,5 +1,5 @@
 import React from "react";
-import { Card, CardContent, CardActionArea, Typography, Box, Chip, Stack } from "@mui/material";
+import { Card, CardContent, Typography, Box, Chip, Stack } from "@mui/material";
 import BusinessIcon from "@mui/icons-material/Business";
 import PersonIcon from "@mui/icons-material/Person";
 import { Ticket } from "../interfaces";
@@ -16,12 +16,14 @@ const TicketCard: React.FC<TicketCardProps> = ({ ticket, onClick, shortenedSumma
   const company = ticket.company?.CompanyName;
 
   return (
-    <Card sx={{ height: "100%" }}>
-      <CardActionArea onClick={onClick} sx={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "stretch" }}>
-        <CardContent sx={{ flexGrow: 1, width: "100%" }}>
+    <Card
+      onClick={onClick}
+      sx={{ height: "100%", display: "flex", flexDirection: "column", cursor: "pointer", transition: "box-shadow .15s, border-color .15s", "&:hover": { boxShadow: 3, borderColor: "primary.main" } }}
+    >
+      <CardContent sx={{ flexGrow: 1, width: "100%" }}>
           <Stack direction="row" spacing={1} sx={{ mb: 1 }} flexWrap="wrap" useFlexGap>
             <Chip size="small" label={ticket.status} color={statusColor(ticket.status)} />
-            {ticket.priority && <Chip size="small" variant="outlined" label={ticket.priority} color={priorityColor(ticket.priority)} />}
+            <Chip size="small" variant="outlined" label={ticket.priority || "Medium"} color={priorityColor(ticket.priority || "Medium")} />
           </Stack>
 
           <Typography variant="subtitle1" sx={{ fontWeight: 600, lineHeight: 1.3 }} gutterBottom>
@@ -49,7 +51,6 @@ const TicketCard: React.FC<TicketCardProps> = ({ ticket, onClick, shortenedSumma
         <Box sx={{ px: 2, py: 1, borderTop: 1, borderColor: "divider", width: "100%" }}>
           <Typography variant="caption" color="text.secondary">#{ticket.ticketnumber} · {date}</Typography>
         </Box>
-      </CardActionArea>
     </Card>
   );
 };

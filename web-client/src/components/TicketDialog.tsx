@@ -67,6 +67,7 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
   const [company, setCompany] = useState<api.Company | null>(null);
   const [contacts, setContacts] = useState<api.Contact[]>([]);
   const [contactId, setContactId] = useState<number | "">("");
+  const [newContact, setNewContact] = useState("");
   const [timeMinutes, setTimeMinutes] = useState(0);
   const [timeEntries, setTimeEntries] = useState<any[]>([]);
 
@@ -138,6 +139,17 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
     persist({ contactId: id === "" ? null : id });
   };
 
+  const addContactInline = async () => {
+    if (!company || !newContact.trim()) return;
+    const c = await api.createContact(company.id, { name: newContact.trim() }).catch(() => null);
+    setNewContact("");
+    if (c) {
+      const full = await api.getCompany(company.id).catch(() => null);
+      setContacts(full?.contacts ?? [...contacts, c]);
+      pickContact(c.id);
+    }
+  };
+
   const logTime = (minutes: number, note?: string) => {
     if (ticket.localId == null || minutes <= 0) return;
     api.logTicketTime(ticket.localId, minutes, note).then(() => { reloadTime(); onUpdated?.("time"); }).catch(() => {});
@@ -188,7 +200,7 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
               <Chip size="small" label={`#${ticket.ticketnumber}`} sx={{ bgcolor: "rgba(255,255,255,0.2)", color: "#fff", fontWeight: 700 }} />
               <Chip size="small" label={status} color={statusColor(status)} />
-              {priority && <Chip size="small" variant="outlined" label={`P${priority}`} sx={{ color: "#fff", borderColor: "rgba(255,255,255,0.5)" }} />}
+              <Chip size="small" variant="outlined" label={priority || "Medium"} sx={{ color: "#fff", borderColor: "rgba(255,255,255,0.5)" }} />
               {source !== "local" && <Chip size="small" icon={<SyncIcon sx={{ color: "#fff !important" }} />} label={externalProvider ?? source} sx={{ bgcolor: "rgba(255,255,255,0.18)", color: "#fff" }} />}
             </Stack>
             <Typography variant="h5" noWrap sx={{ fontWeight: 700 }}>{title || "(untitled)"}</Typography>
@@ -236,7 +248,13 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
                     </Select>
                   </Box>
                   <EditableField label="Title" value={title} onSave={(v) => { setTitle(v); persist({ title: v }); }} />
-                  <EditableField label="Priority" value={priority} options={[...TICKET_PRIORITIES]} onSave={(v) => { setPriority(v); persist({ priority: v }); }} />
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">Priority</Typography>
+                    <Select fullWidth size="small" value={priority || "Medium"} sx={{ mt: 0.5 }}
+                      onChange={(e) => { setPriority(e.target.value); persist({ priority: e.target.value }); }}>
+                      {TICKET_PRIORITIES.map((p) => <MenuItem key={p} value={p}>{p}</MenuItem>)}
+                    </Select>
+                  </Box>
                   <Autocomplete
                     size="small"
                     freeSolo
@@ -256,6 +274,12 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
                           <MenuItem key={c.id} value={c.id}>{c.name}{c.title ? ` · ${c.title}` : ""}</MenuItem>
                         ))}
                       </Select>
+                      <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                        <TextField size="small" placeholder="New contact name" value={newContact}
+                          onChange={(e) => setNewContact(e.target.value)} sx={{ flexGrow: 1 }}
+                          onKeyDown={(e) => e.key === "Enter" && addContactInline()} />
+                        <Button size="small" variant="outlined" disabled={!newContact.trim()} onClick={addContactInline}>Add</Button>
+                      </Stack>
                     </Box>
                   )}
                   <Stack direction="row" spacing={1} alignItems="center">
@@ -297,6 +321,7 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
                             <Typography variant="body2" noWrap>{d.displayName || d.hostname || d.ipAddress || "device"}</Typography>
                             {d.ipAddress && <Typography variant="caption" color="text.secondary">{d.ipAddress}</Typography>}
                           </Box>
+                          <Chip size="small" variant="outlined" label={sourceLabel(d.source)} color={sourceColor(d.source)} />
                           {canRun && (
                             <Tooltip title="Run script">
                               <IconButton size="small" onClick={() => setScriptDevice(d)}><TerminalIcon fontSize="small" /></IconButton>
@@ -319,6 +344,15 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
                     getOptionLabel={(d) => `${d.displayName || d.hostname || d.ipAddress || "device"}${d.ipAddress ? ` · ${d.ipAddress}` : ""}`}
                     value={addDevice}
                     onChange={(_e, v) => setAddDevice(v)}
+                    renderOption={(props, d) => (
+                      <Box component="li" {...props} key={d.id} sx={{ display: "flex", gap: 1 }}>
+                        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                          <Typography variant="body2" noWrap>{d.displayName || d.hostname || d.ipAddress || "device"}</Typography>
+                          {d.ipAddress && <Typography variant="caption" color="text.secondary">{d.ipAddress}</Typography>}
+                        </Box>
+                        <Chip size="small" variant="outlined" label={sourceLabel(d.source)} color={sourceColor(d.source)} />
+                      </Box>
+                    )}
                     renderInput={(params) => <TextField {...params} label="Link a device" />}
                   />
                   <Button size="small" variant="outlined" disabled={!addDevice} onClick={linkDevice}>Link</Button>
@@ -373,6 +407,21 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
     </Dialog>
   );
 };
+
+function sourceLabel(s?: string): string {
+  switch (s) {
+    case "tactical_rmm": return "Tactical";
+    case "netviz": return "NetViz";
+    case "meshcentral": return "Mesh";
+    case "api": return "API";
+    default: return "Manual";
+  }
+}
+function sourceColor(s?: string): "primary" | "secondary" | "default" {
+  if (s === "tactical_rmm") return "primary";
+  if (s === "netviz") return "secondary";
+  return "default";
+}
 
 function fmtMinutes(m: number): string {
   if (m <= 0) return "0m";

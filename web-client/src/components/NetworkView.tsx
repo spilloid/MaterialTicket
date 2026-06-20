@@ -53,8 +53,8 @@ interface Probe {
   cidr?: string | null;
 }
 
-const CENTER = { x: 500, y: 330 };
-const VIEW = { w: 1000, h: 690 };
+const CENTER = { x: 560, y: 390 };
+const VIEW = { w: 1120, h: 780 };
 
 const statusColor = (s: string) =>
   s === "online" ? "#2e7d32" : s === "offline" ? "#9e9e9e" : "#ed6c02";
@@ -150,9 +150,9 @@ export default function NetworkView({ initialCompany }: { initialCompany?: strin
           No devices yet. Register a netviz probe (Admin → Probes), sync from Tactical RMM, or add a device manually — they'll appear here as a network map.
         </Alert>
       ) : (
-        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-          <Paper variant="outlined" sx={{ flex: 1, p: 1, position: "relative", bgcolor: "#0b1020", borderRadius: 2, minHeight: 420 }}>
-            <svg viewBox={`0 0 ${VIEW.w} ${VIEW.h}`} width="100%" style={{ display: "block" }}>
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="stretch">
+          <Paper variant="outlined" sx={{ flex: 1, p: 1, position: "relative", bgcolor: "#0b1020", borderRadius: 2, height: { xs: 460, md: 660 } }}>
+            <svg viewBox={`0 0 ${VIEW.w} ${VIEW.h}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
               {/* edges */}
               {layout.map((n) => (
                 <line key={`e-${n.device.id}`} x1={CENTER.x} y1={CENTER.y} x2={n.x} y2={n.y} stroke="#27314f" strokeWidth={1} />
@@ -204,9 +204,12 @@ export default function NetworkView({ initialCompany }: { initialCompany?: strin
                         {n.device.openPorts.length}
                       </text>
                     )}
-                    <text x={n.x} y={n.y + r + 13} textAnchor="middle" fill="#cfd8ec" fontSize={9} pointerEvents="none">
-                      {shortLabel(n.device)}
-                    </text>
+                    {(isSel || isHover) && (
+                      <text x={n.x} y={n.y + r + 14} textAnchor="middle" fill="#fff" fontSize={12} fontWeight={600} pointerEvents="none"
+                        style={{ paintOrder: "stroke", stroke: "#0b1020", strokeWidth: 3 }}>
+                        {shortLabel(n.device)}
+                      </text>
+                    )}
                   </g>
                 );
               })}
@@ -308,22 +311,37 @@ function deviceScore(d: Device): number {
   return (d.openPorts?.length ?? 0) * 2 + (d.status === "online" ? 3 : 0) + (d.macAddress ? 1 : 0);
 }
 
-/** Radial ring layout — ported from netviz's hierarchyLayout. */
-function radialLayout(devices: Device[]) {
+interface LayoutNode { device: Device; x: number; y: number; size: number }
+
+/**
+ * Concentric-ring layout that actually spreads out: each ring holds a growing
+ * number of nodes at a growing radius, so dozens of devices fan out evenly
+ * instead of piling into the center. Slightly elliptical to use the wide canvas.
+ */
+function radialLayout(devices: Device[]): LayoutNode[] {
   const sorted = [...devices].sort((a, b) => deviceScore(b) - deviceScore(a));
-  return sorted.map((device, index) => {
-    const ringIndex = Math.floor((Math.sqrt(index + 1) - 1) / 1.55);
-    const ringStart = Math.max(0, Math.floor((ringIndex * 1.55 + 1) ** 2) - 1);
-    const ringCapacity = Math.max(12, Math.ceil(18 + ringIndex * 14));
-    const position = index - ringStart;
-    const angle = (position / ringCapacity) * Math.PI * 2 - Math.PI / 2 + ringIndex * 0.21;
-    const radius = Math.min(278, 116 + ringIndex * 56);
-    const size = Math.max(34, Math.min(58, 30 + (device.openPorts?.length ?? 0) * 4));
-    return {
-      device,
-      x: CENTER.x + Math.cos(angle) * radius,
-      y: CENTER.y + Math.sin(angle) * radius,
-      size,
-    };
-  });
+  const out: LayoutNode[] = [];
+  let i = 0;
+  let ring = 0;
+  while (i < sorted.length) {
+    const capacity = ring === 0 ? 8 : Math.floor(8 + ring * 7); // 8, 15, 22, 29…
+    const count = Math.min(capacity, sorted.length - i);
+    const radiusX = 150 + ring * 135;
+    const radiusY = 120 + ring * 108;
+    for (let j = 0; j < count; j++) {
+      const device = sorted[i + j];
+      // spread evenly around the ring; offset alternating rings so nodes don't align
+      const angle = (j / count) * Math.PI * 2 - Math.PI / 2 + (ring % 2 ? Math.PI / count : 0);
+      const size = Math.max(30, Math.min(54, 28 + (device.openPorts?.length ?? 0) * 4));
+      out.push({
+        device,
+        x: CENTER.x + Math.cos(angle) * radiusX,
+        y: CENTER.y + Math.sin(angle) * radiusY,
+        size,
+      });
+    }
+    i += count;
+    ring++;
+  }
+  return out;
 }

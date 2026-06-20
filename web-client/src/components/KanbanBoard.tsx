@@ -1,7 +1,7 @@
 // ./components/KanbanBoard.tsx
 import React from "react";
 import { Box, Typography } from "@mui/material";
-import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { Ticket } from "../interfaces";
 import TicketCard from "./TicketCard";
 import { TICKET_STATUSES } from "../ticketVocab";
@@ -37,20 +37,24 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
       <Box sx={{ display: "flex", overflowX: "auto" }}>
         {statuses.map((status) => (
           <Droppable droppableId={status} key={status}>
-            {(provided) => (
+            {(provided, snapshot) => (
               <Box
                 ref={provided.innerRef}
                 {...provided.droppableProps}
                 sx={{
-                  minWidth: 300,
-                  margin: 1,
-                  backgroundColor: "#f4f6f8",
+                  minWidth: 290,
+                  width: 290,
+                  mx: 1,
+                  bgcolor: snapshot.isDraggingOver ? "action.selected" : "grey.50",
+                  border: 1,
+                  borderColor: "divider",
                   borderRadius: 2,
-                  padding: 1,
+                  p: 1,
+                  minHeight: 120,
                 }}
               >
-                <Typography variant="h6" sx={{ textAlign: "center" }}>
-                  {status}
+                <Typography variant="subtitle2" sx={{ px: 0.5, mb: 1, color: "text.secondary", fontWeight: 700 }}>
+                  {status.toUpperCase()} · {ticketsByStatus[status]?.length ?? 0}
                 </Typography>
                 {ticketsByStatus[status]?.map((ticket, index) => (
                   <Draggable
