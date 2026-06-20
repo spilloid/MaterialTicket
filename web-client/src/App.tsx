@@ -10,6 +10,13 @@ import {
   Typography,
   Snackbar,
   Alert,
+  ToggleButton,
+  ToggleButtonGroup,
+  TextField,
+  InputAdornment,
+  Tooltip,
+  IconButton,
+  Paper,
 } from "@mui/material";
 import { theme as defaultTheme } from "./theme";
 import DashboardAppBar from "./components/DashboardAppBar";
@@ -28,6 +35,11 @@ import * as api from "./api/client";
 import { useAuth } from "./auth/AuthContext";
 import LoginView from "./auth/LoginView";
 import AddIcon from "@mui/icons-material/Add";
+import ViewModuleIcon from "@mui/icons-material/ViewModule";
+import TableRowsIcon from "@mui/icons-material/TableRows";
+import ViewKanbanIcon from "@mui/icons-material/ViewKanban";
+import SearchIcon from "@mui/icons-material/Search";
+import FilterListIcon from "@mui/icons-material/FilterList";
 
 // Map local-DB ticket record to the component-facing Ticket interface.
 // The component interface uses CW-era field names; this adapter lets us keep
@@ -79,6 +91,7 @@ function App() {
   const [cardSize, setCardSize] = useState(5);
   const [toast, setToast] = useState<{ message: string; severity: "success" | "error" } | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const { user, loading: authLoading, isAdmin, setUser } = useAuth();
   const currentUser = { id: user?.id ?? 0, name: user?.displayName ?? user?.username ?? "User" };
@@ -156,6 +169,23 @@ function App() {
     if (user) fetchTickets();
   }, [fetchTickets, user]);
 
+  // Full-text search (debounced). Empty query falls back to the full list.
+  useEffect(() => {
+    if (!user) return;
+    const q = searchTerm.trim();
+    if (!q) {
+      setFilteredTickets(tickets);
+      return;
+    }
+    const handle = setTimeout(() => {
+      api
+        .searchTickets(q)
+        .then((data) => setFilteredTickets((data as Record<string, unknown>[]).map(mapDbTicket)))
+        .catch(() => {});
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [searchTerm, tickets, user]);
+
   if (authLoading) {
     return (
       <ThemeProvider theme={defaultTheme}>
@@ -204,29 +234,43 @@ function App() {
         <Box component="main" sx={{ flexGrow: 1, p: 3, backgroundColor: "background.default" }}>
           <Toolbar />
 
-          <Box sx={{ mb: 2 }}>
-            <Button variant="contained" onClick={() => setViewMode("cards")} sx={{ mr: 2 }} disabled={viewMode === "cards"}>
-              Card View
-            </Button>
-            <Button variant="contained" onClick={() => setViewMode("table")} sx={{ mr: 2 }} disabled={viewMode === "table"}>
-              Table View
-            </Button>
-            <Button variant="contained" onClick={() => setViewMode("kanban")} sx={{ mr: 2 }} disabled={viewMode === "kanban"}>
-              Kanban View
-            </Button>
-            <Button variant="contained" onClick={() => setFilterDialogOpen(true)}>
-              Filter Tickets
-            </Button>
-            <Button
-              variant="contained"
-              color="success"
-              startIcon={<AddIcon />}
-              onClick={() => setCreateDialogOpen(true)}
-              sx={{ ml: 2 }}
-            >
-              New Ticket
-            </Button>
-          </Box>
+          {["cards", "table", "kanban"].includes(viewMode) && (
+            <Paper variant="outlined" sx={{ p: 1, mb: 2, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
+              <ToggleButtonGroup
+                size="small"
+                exclusive
+                value={viewMode}
+                onChange={(_e, v) => v && setViewMode(v)}
+              >
+                <ToggleButton value="cards"><Tooltip title="Cards"><ViewModuleIcon fontSize="small" /></Tooltip></ToggleButton>
+                <ToggleButton value="table"><Tooltip title="Table"><TableRowsIcon fontSize="small" /></Tooltip></ToggleButton>
+                <ToggleButton value="kanban"><Tooltip title="Board"><ViewKanbanIcon fontSize="small" /></Tooltip></ToggleButton>
+              </ToggleButtonGroup>
+
+              <TextField
+                size="small"
+                placeholder="Search tickets…"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                sx={{ flexGrow: 1, minWidth: 200, maxWidth: 420 }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start"><SearchIcon fontSize="small" color="action" /></InputAdornment>
+                  ),
+                }}
+              />
+
+              <Tooltip title="Filter">
+                <IconButton onClick={() => setFilterDialogOpen(true)}><FilterListIcon /></IconButton>
+              </Tooltip>
+
+              <Box sx={{ flexGrow: 1 }} />
+
+              <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateDialogOpen(true)}>
+                New ticket
+              </Button>
+            </Paper>
+          )}
 
           {viewMode === "admin" ? (
             <AdminView />

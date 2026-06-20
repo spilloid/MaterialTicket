@@ -306,6 +306,11 @@ export function getTicket(id: number) {
   return request<unknown>(`/tickets/${id}`);
 }
 
+/** Postgres full-text search across ticket title/summary/description/company. */
+export function searchTickets(q: string, limit = 100) {
+  return request<unknown[]>(`/tickets/search?q=${encodeURIComponent(q)}&limit=${limit}`);
+}
+
 export function createTicket(data: Record<string, unknown>) {
   return request<unknown>('/tickets', { method: 'POST', body: JSON.stringify(data) });
 }

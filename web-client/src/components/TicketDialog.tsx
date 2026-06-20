@@ -33,6 +33,7 @@ import EditableField from "./EditableField";
 import NotesSection from "./NotesSection";
 import RunScriptDialog from "./RunScriptDialog";
 import * as api from "../api/client";
+import { TICKET_STATUSES, TICKET_PRIORITIES, statusColor } from "../ticketVocab";
 
 interface TicketDialogProps {
   ticket: Ticket;
@@ -40,16 +41,6 @@ interface TicketDialogProps {
   onClose: () => void;
   notes: Note[];
   currentUser: any;
-}
-
-const STATUSES = ["New", "Assigned", "In Progress", "Waiting", "Resolved", "Closed"];
-
-function statusColor(s: string): "info" | "warning" | "success" | "default" | "error" {
-  if (["Resolved", "Closed"].includes(s)) return "success";
-  if (["In Progress", "Assigned"].includes(s)) return "warning";
-  if (s === "Waiting") return "default";
-  if (s === "Deleted") return "error";
-  return "info";
 }
 
 const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, notes, currentUser }) => {
@@ -176,11 +167,11 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
                   <Box>
                     <Typography variant="caption" color="text.secondary">Status</Typography>
                     <Select fullWidth size="small" value={status} onChange={(e) => handleStatus(e.target.value)} sx={{ mt: 0.5 }}>
-                      {STATUSES.map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+                      {TICKET_STATUSES.map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
                     </Select>
                   </Box>
                   <EditableField label="Title" value={title} onSave={(v) => { setTitle(v); persist({ title: v }); }} />
-                  <EditableField label="Priority" value={priority} options={["1", "2", "3", "4", "5", "6"]} onSave={(v) => { setPriority(v); persist({ priority: v }); }} />
+                  <EditableField label="Priority" value={priority} options={[...TICKET_PRIORITIES]} onSave={(v) => { setPriority(v); persist({ priority: v }); }} />
                   <EditableField label="Company" value={companyName} onSave={(v) => { setCompanyName(v); persist({ companyName: v }); }} />
                   <Stack direction="row" spacing={1} alignItems="center">
                     <Box sx={{ color: "text.secondary", display: "flex" }}><PersonIcon fontSize="small" /></Box>

@@ -4,6 +4,7 @@ import { Box, Typography } from "@mui/material";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import { Ticket } from "../interfaces";
 import TicketCard from "./TicketCard";
+import { TICKET_STATUSES } from "../ticketVocab";
 
 interface KanbanBoardProps {
   tickets: Ticket[];
@@ -11,7 +12,7 @@ interface KanbanBoardProps {
   onTicketClick: (ticket: Ticket) => void;
 }
 
-const statuses = ["New", "Reviewed", "Scheduled", "InProgress", "Closed"];
+const statuses = TICKET_STATUSES;
 
 const KanbanBoard: React.FC<KanbanBoardProps> = ({
   tickets,
