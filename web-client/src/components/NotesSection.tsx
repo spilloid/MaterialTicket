@@ -84,14 +84,14 @@ const NotesSection: React.FC<NotesSectionProps> = ({
             <ListItem key={note.id} divider>
               <Box sx={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
                 <Box sx={{ minWidth: 150 }}>
-                  <Typography variant="body2" sx={{ color: "#333" }}>
+                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
                     {new Date(note.dateCreated).toLocaleTimeString()}{" "}
                     {new Date(note.dateCreated).toLocaleDateString()}
                   </Typography>
-                  <Typography variant="body2" sx={{ color: "#333" }}>
+                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
                     {note.authorName}
                   </Typography>
-                  <Typography variant="body2" sx={{ color: "#333" }}>
+                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
                     {note.type === "timeEntry"
                       ? `Time: ${note.minutes != null ? `${note.minutes}m` : `${note.timeStart} - ${note.timeStop}`}`
                       : "Note"}

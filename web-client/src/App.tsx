@@ -94,6 +94,7 @@ function App() {
   const [toast, setToast] = useState<{ message: string; severity: "success" | "error" } | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [networkCompany, setNetworkCompany] = useState<string | undefined>(undefined);
 
   const { user, loading: authLoading, isAdmin, setUser } = useAuth();
   const currentUser = { id: user?.id ?? 0, name: user?.displayName ?? user?.username ?? "User" };
@@ -287,9 +288,12 @@ function App() {
           {viewMode === "admin" ? (
             <AdminView />
           ) : viewMode === "network" ? (
-            <NetworkView />
+            <NetworkView initialCompany={networkCompany} />
           ) : viewMode === "companies" ? (
-            <CompaniesView onOpenTicket={openTicketById} />
+            <CompaniesView
+              onOpenTicket={openTicketById}
+              onViewNetwork={(name) => { setNetworkCompany(name); setViewMode("network"); }}
+            />
           ) : viewMode === "sync" ? (
             <CWManageView onTicketsChanged={fetchTickets} />
           ) : (

@@ -24,6 +24,11 @@ export async function companyRoutes(server: FastifyInstance) {
     return reply.send(company);
   });
 
+  // Backfill Company records from legacy companyName strings (admin).
+  server.post('/companies/backfill', { preHandler: requireRole('admin') }, async (req, reply) => {
+    return reply.send(await companyRepo.backfillFromNames(req.actorSub));
+  });
+
   server.post('/companies', async (req: FastifyRequest, reply: FastifyReply) => {
     const body = (req.body ?? {}) as companyRepo.CompanyInput;
     if (!body.name?.trim()) return reply.status(400).send({ error: 'name is required' });

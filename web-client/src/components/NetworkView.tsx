@@ -59,12 +59,16 @@ const VIEW = { w: 1000, h: 690 };
 const statusColor = (s: string) =>
   s === "online" ? "#2e7d32" : s === "offline" ? "#9e9e9e" : "#ed6c02";
 
-export default function NetworkView() {
+export default function NetworkView({ initialCompany }: { initialCompany?: string }) {
   const [devices, setDevices] = useState<Device[]>([]);
   const [probes, setProbes] = useState<Probe[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [group, setGroup] = useState<string>("all");
+  const [group, setGroup] = useState<string>(initialCompany ? `company:${initialCompany}` : "all");
+
+  useEffect(() => {
+    if (initialCompany) setGroup(`company:${initialCompany}`);
+  }, [initialCompany]);
   const [selected, setSelected] = useState<Device | null>(null);
   const [hovered, setHovered] = useState<number | null>(null);
   const [deviceTickets, setDeviceTickets] = useState<LinkedTicket[]>([]);

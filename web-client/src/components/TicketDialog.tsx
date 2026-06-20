@@ -19,8 +19,10 @@ import {
   Alert,
   Tooltip,
   Autocomplete,
+  Divider,
 } from "@mui/material";
 import { Close } from "@mui/icons-material";
+import EditIcon from "@mui/icons-material/Edit";
 import ComputerIcon from "@mui/icons-material/Computer";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import BusinessIcon from "@mui/icons-material/Business";
@@ -66,6 +68,7 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
   const [contacts, setContacts] = useState<api.Contact[]>([]);
   const [contactId, setContactId] = useState<number | "">("");
   const [timeMinutes, setTimeMinutes] = useState(0);
+  const [timeEntries, setTimeEntries] = useState<any[]>([]);
 
   const reloadDevices = useCallback(() => {
     if (ticket.localId == null) return;
@@ -75,7 +78,17 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
   const reloadTime = useCallback(() => {
     if (ticket.localId == null) return;
     api.getTicketTime(ticket.localId).then((t) => setTimeMinutes(t.minutes)).catch(() => {});
+    api.listNotes(ticket.localId).then((ns) => setTimeEntries((ns as any[]).filter((n) => n.noteType === "time_entry"))).catch(() => {});
   }, [ticket.localId]);
+
+  const deleteTimeEntry = (noteId: number) => {
+    if (ticket.localId == null) return;
+    api.deleteNote(ticket.localId, noteId).then(() => { reloadTime(); onUpdated?.("time"); }).catch(() => {});
+  };
+  const editTimeEntry = (noteId: number, minutes: number, content: string) => {
+    if (ticket.localId == null) return;
+    api.updateNote(ticket.localId, noteId, { minutes, content }).then(() => { reloadTime(); onUpdated?.("time"); }).catch(() => {});
+  };
 
   // Load the cockpit: full ticket record, linked devices, script jobs, mail,
   // assignable users, and the device pool for linking.
@@ -263,7 +276,7 @@ const TicketDialog: React.FC<TicketDialogProps> = ({ ticket, open, onClose, note
             </Card>
 
             {/* Time tracking */}
-            <TimeCard minutes={timeMinutes} onLog={logTime} />
+            <TimeCard minutes={timeMinutes} entries={timeEntries} onLog={logTime} onDelete={deleteTimeEntry} onEdit={editTimeEntry} />
 
             {/* Linked devices */}
             <Card sx={{ mt: 2 }}>
@@ -368,10 +381,24 @@ function fmtMinutes(m: number): string {
   return h > 0 ? `${h}h${min ? ` ${min}m` : ""}` : `${min}m`;
 }
 
-function TimeCard({ minutes, onLog }: { minutes: number; onLog: (m: number, note?: string) => void }) {
+interface TimeCardProps {
+  minutes: number;
+  entries: any[];
+  onLog: (m: number, note?: string) => void;
+  onDelete: (noteId: number) => void;
+  onEdit: (noteId: number, minutes: number, content: string) => void;
+}
+
+function TimeCard({ minutes, entries, onLog, onDelete, onEdit }: TimeCardProps) {
   const [custom, setCustom] = useState("");
   const [note, setNote] = useState("");
+  const [editing, setEditing] = useState<number | null>(null);
+  const [editMin, setEditMin] = useState("");
   const presets = [15, 30, 60, 120];
+
+  const startEdit = (e: any) => { setEditing(e.id); setEditMin(String(e.minutes ?? "")); };
+  const commitEdit = (e: any) => { const m = Number(editMin); if (m > 0) onEdit(e.id, m, e.content); setEditing(null); };
+
   return (
     <Card sx={{ mt: 2 }}>
       <CardContent>
@@ -384,10 +411,35 @@ function TimeCard({ minutes, onLog }: { minutes: number; onLog: (m: number, note
             <Button key={p} size="small" variant="outlined" onClick={() => onLog(p)}>+{fmtMinutes(p)}</Button>
           ))}
         </Stack>
-        <Stack direction="row" spacing={1}>
+        <Stack direction="row" spacing={1} sx={{ mb: entries.length ? 1.5 : 0 }}>
           <TextField size="small" label="min" type="number" value={custom} onChange={(e) => setCustom(e.target.value)} sx={{ width: 84 }} />
           <TextField size="small" label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} sx={{ flexGrow: 1 }} />
           <Button variant="contained" disabled={!Number(custom)} onClick={() => { onLog(Number(custom), note); setCustom(""); setNote(""); }}>Log</Button>
+        </Stack>
+        {entries.length > 0 && <Divider sx={{ mb: 1 }} />}
+        <Stack spacing={0.5}>
+          {entries.map((e) => (
+            <Stack key={e.id} direction="row" alignItems="center" spacing={1}>
+              {editing === e.id ? (
+                <>
+                  <TextField size="small" type="number" value={editMin} onChange={(ev) => setEditMin(ev.target.value)} sx={{ width: 80 }} autoFocus
+                    onKeyDown={(ev) => ev.key === "Enter" && commitEdit(e)} />
+                  <Button size="small" onClick={() => commitEdit(e)}>Save</Button>
+                </>
+              ) : (
+                <>
+                  <Chip size="small" label={fmtMinutes(e.minutes ?? 0)} />
+                  <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                    <Typography variant="caption" color="text.secondary" noWrap title={e.content}>
+                      {e.author} · {new Date(e.createdAt).toLocaleDateString()}{e.content && ` · ${e.content}`}
+                    </Typography>
+                  </Box>
+                  <IconButton size="small" onClick={() => startEdit(e)}><EditIcon fontSize="small" /></IconButton>
+                  <IconButton size="small" onClick={() => onDelete(e.id)}><Close fontSize="small" /></IconButton>
+                </>
+              )}
+            </Stack>
+          ))}
         </Stack>
       </CardContent>
     </Card>

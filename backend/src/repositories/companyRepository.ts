@@ -74,6 +74,37 @@ export function devicesForCompany(companyId: number) {
   return prisma.device.findMany({ where: { companyId }, orderBy: { hostname: 'asc' } });
 }
 
+/**
+ * Backfill: turn the legacy denormalized companyName strings on tickets/devices
+ * into real Company records and link them by id. Idempotent — only touches rows
+ * that have a companyName but no companyId yet.
+ */
+export async function backfillFromNames(actor: string): Promise<{ companies: number; tickets: number; devices: number }> {
+  const ticketNames = await prisma.ticket.findMany({
+    where: { companyId: null, companyName: { not: null } },
+    distinct: ['companyName'],
+    select: { companyName: true },
+  });
+  const deviceNames = await prisma.device.findMany({
+    where: { companyId: null, companyName: { not: null } },
+    distinct: ['companyName'],
+    select: { companyName: true },
+  });
+  const names = Array.from(new Set([...ticketNames, ...deviceNames].map((x) => x.companyName!).filter(Boolean)));
+
+  let companies = 0;
+  let tickets = 0;
+  let devices = 0;
+  for (const name of names) {
+    const existing = await prisma.company.findFirst({ where: { name: { equals: name, mode: 'insensitive' } } });
+    const company = existing ?? (await create({ name }, actor));
+    if (!existing) companies++;
+    tickets += (await prisma.ticket.updateMany({ where: { companyId: null, companyName: name }, data: { companyId: company.id } })).count;
+    devices += (await prisma.device.updateMany({ where: { companyId: null, companyName: name }, data: { companyId: company.id } })).count;
+  }
+  return { companies, tickets, devices };
+}
+
 /** Total logged time (minutes) across all of a company's tickets. */
 export async function timeTotalMinutes(companyId: number): Promise<number> {
   const r = await prisma.note.aggregate({

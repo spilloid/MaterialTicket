@@ -361,6 +361,10 @@ export function getCompanyDevices(id: number) {
 export function getCompanyTime(id: number) {
   return request<{ minutes: number }>(`/companies/${id}/time`);
 }
+/** Turn legacy companyName strings into linked Company records (admin). */
+export function backfillCompanies() {
+  return request<{ companies: number; tickets: number; devices: number }>("/companies/backfill", { method: "POST" });
+}
 
 export function createContact(companyId: number, data: Partial<Contact>) {
   return request<Contact>(`/companies/${companyId}/contacts`, { method: "POST", body: JSON.stringify(data) });

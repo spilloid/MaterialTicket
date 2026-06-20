@@ -24,6 +24,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import SearchIcon from "@mui/icons-material/Search";
 import BusinessIcon from "@mui/icons-material/Business";
 import ComputerIcon from "@mui/icons-material/Computer";
+import HubIcon from "@mui/icons-material/Hub";
 import * as api from "../api/client";
 import { statusColor } from "../ticketVocab";
 
@@ -33,12 +34,24 @@ function fmtMinutes(m: number): string {
   return h > 0 ? `${h}h${m % 60 ? ` ${m % 60}m` : ""}` : `${m}m`;
 }
 
-export default function CompaniesView({ onOpenTicket }: { onOpenTicket?: (ticketId: number) => void }) {
+export default function CompaniesView({ onOpenTicket, onViewNetwork }: { onOpenTicket?: (ticketId: number) => void; onViewNetwork?: (name: string) => void }) {
   const [companies, setCompanies] = useState<api.Company[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [q, setQ] = useState("");
   const [newName, setNewName] = useState("");
   const [loading, setLoading] = useState(true);
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+
+  const backfill = async () => {
+    setBackfillMsg(null);
+    try {
+      const r = await api.backfillCompanies();
+      setBackfillMsg(`Linked ${r.tickets} tickets and ${r.devices} devices · created ${r.companies} companies`);
+      reload();
+    } catch (e) {
+      setBackfillMsg((e as Error).message);
+    }
+  };
 
   const reload = useCallback(() => {
     api.listCompanies().then((c) => { setCompanies(c); if (selectedId == null && c.length) setSelectedId(c[0].id); }).finally(() => setLoading(false));
@@ -60,7 +73,11 @@ export default function CompaniesView({ onOpenTicket }: { onOpenTicket?: (ticket
 
   return (
     <Box>
-      <Typography variant="h5" sx={{ mb: 2 }}>Companies</Typography>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }} flexWrap="wrap" gap={1}>
+        <Typography variant="h5">Companies</Typography>
+        <Button size="small" variant="outlined" onClick={backfill}>Import from ticket/device data</Button>
+      </Stack>
+      {backfillMsg && <Alert severity="info" sx={{ mb: 2 }} onClose={() => setBackfillMsg(null)}>{backfillMsg}</Alert>}
       <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="flex-start">
         <Paper variant="outlined" sx={{ width: { xs: "100%", md: 300 }, flexShrink: 0 }}>
           <Box sx={{ p: 1.5 }}>
@@ -87,7 +104,7 @@ export default function CompaniesView({ onOpenTicket }: { onOpenTicket?: (ticket
           {selectedId == null ? (
             <Alert severity="info">Select or create a company.</Alert>
           ) : (
-            <CompanyDetail key={selectedId} id={selectedId} onChanged={reload} onOpenTicket={onOpenTicket} onDeleted={() => { setSelectedId(null); reload(); }} />
+            <CompanyDetail key={selectedId} id={selectedId} onChanged={reload} onOpenTicket={onOpenTicket} onViewNetwork={onViewNetwork} onDeleted={() => { setSelectedId(null); reload(); }} />
           )}
         </Box>
       </Stack>
@@ -95,7 +112,7 @@ export default function CompaniesView({ onOpenTicket }: { onOpenTicket?: (ticket
   );
 }
 
-function CompanyDetail({ id, onChanged, onOpenTicket, onDeleted }: { id: number; onChanged: () => void; onOpenTicket?: (t: number) => void; onDeleted: () => void }) {
+function CompanyDetail({ id, onChanged, onOpenTicket, onViewNetwork, onDeleted }: { id: number; onChanged: () => void; onOpenTicket?: (t: number) => void; onViewNetwork?: (name: string) => void; onDeleted: () => void }) {
   const [company, setCompany] = useState<api.Company | null>(null);
   const [tickets, setTickets] = useState<any[]>([]);
   const [devices, setDevices] = useState<any[]>([]);
@@ -144,6 +161,9 @@ function CompanyDetail({ id, onChanged, onOpenTicket, onDeleted }: { id: number;
         </Box>
         <Typography variant="h5" sx={{ flexGrow: 1 }}>{company.name}</Typography>
         <Chip label={`${fmtMinutes(minutes)} logged`} color="info" />
+        {onViewNetwork && devices.length > 0 && (
+          <Button size="small" startIcon={<HubIcon />} onClick={() => onViewNetwork(company.name)}>Network map</Button>
+        )}
         <IconButton color="error" onClick={remove}><DeleteIcon /></IconButton>
       </Stack>
       {msg && <Alert severity="success" onClose={() => setMsg(null)}>{msg}</Alert>}
