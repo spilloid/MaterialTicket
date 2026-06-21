@@ -36,14 +36,17 @@ export function tagSubjectWithTicket(subject: string, ticketNumber: string | nul
   return `[#${ticketNumber}] ${subject}`;
 }
 
-/** Extract a ticket number from an inbound subject (`[#NNNNN]`, falling back to a
- *  bare `#NNNNN`). Returns null when no token is present. */
+/**
+ * Extract a ticket number from an inbound subject. Only the bracketed `[#NNNNN]`
+ * token we emit on outbound mail counts — a bare `#NNNNN` is deliberately NOT
+ * matched, because real-world subjects routinely contain unrelated numbers
+ * ("Invoice #10042", "Re: PO #12345") that would otherwise mis-thread a brand
+ * new email onto an existing ticket. Returns null when no token is present.
+ */
 export function ticketNumberFromSubject(subject: string | null | undefined): string | null {
   if (!subject) return null;
   const tagged = subject.match(TICKET_TAG_RE);
-  if (tagged) return tagged[1];
-  const bare = subject.match(/#(\d{4,6})\b/);
-  return bare ? bare[1] : null;
+  return tagged ? tagged[1] : null;
 }
 
 /** Generate a Message-ID rooted on the sender address's domain. */

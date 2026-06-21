@@ -2,6 +2,8 @@
 
 Developer reference for working with this codebase. Keep this document updated as the project evolves.
 
+> **Local tooling note:** the GitHub CLI is installed at `C:\Program Files\GitHub CLI\gh.exe` (not on the Git Bash PATH — invoke it by full path, e.g. `"/c/Program Files/GitHub CLI/gh.exe"`). It's authenticated as `spilloid`. Note the token currently lacks `write:packages`, so pushing images to ghcr.io needs a PAT with that scope (or `gh auth refresh -s write:packages`).
+
 ---
 
 ## What this is

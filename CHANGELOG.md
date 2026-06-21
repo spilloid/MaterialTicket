@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.9.1 — 2026-06-21
+
+### Added
+
+- `AUTH_ADMIN_EMAILS` allowlist — emails listed here are granted the admin role on every OIDC/SAML login (promotion-only; non-listed users are never demoted).
+
+### Fixed
+
+- Inbound email subject threading no longer re-attaches on a bare `#NNNNN`. Only the bracketed `[#NNNNN]` tag we emit on outbound mail counts, so unrelated subjects ("Invoice #10042", "PO #12345") can't mis-thread a new email onto an existing ticket.
+
+See [RELEASE_NOTES_v1.9.1.md](RELEASE_NOTES_v1.9.1.md) for the full release notes.
+
 ## 1.9.0 — 2026-06-21
 
 ### Added

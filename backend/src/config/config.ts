@@ -7,6 +7,17 @@ function ticketNumberDigits(value: string | undefined): number {
   return Number.isFinite(parsed) ? Math.min(6, Math.max(4, Math.trunc(parsed))) : 5;
 }
 
+// Comma/space/semicolon-separated list of email addresses that are always
+// granted the admin role when they sign in via SSO (OIDC/SAML). Normalized to
+// lowercase. Promotion-only: matching users are raised to admin on login but a
+// non-matching user is never demoted.
+function parseAdminEmails(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(/[\s,;]+/)
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 export const config = {
   serverPort: process.env.SERVER_PORT || 8060,
 
@@ -29,6 +40,11 @@ export const config = {
   // Session cookie signing secret. Required in production; a dev fallback is
   // used when unset so local dev works out of the box (sessions reset on boot).
   sessionSecret: process.env.AUTH_SESSION_SECRET || 'dev-insecure-session-secret-change-me',
+
+  // SSO admin allowlist — emails here are always granted admin on SSO login
+  // (promotion-only). Useful when the IdP owns identity but you still need a
+  // known owner to be admin without a manual DB edit.
+  adminEmails: parseAdminEmails(process.env.AUTH_ADMIN_EMAILS),
 
   // Bootstrap admin — only used to create the first local admin when the users
   // table is empty. No-op once any user exists.

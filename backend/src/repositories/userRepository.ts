@@ -8,6 +8,12 @@
 import { AuthProvider, Prisma, User, UserRole } from '@prisma/client';
 import { prisma } from '../db/prisma';
 import * as audit from './auditRepository';
+import { config } from '../config/config';
+
+/** Whether an SSO identity's email is in the AUTH_ADMIN_EMAILS allowlist. */
+function isAllowlistedAdmin(email?: string | null): boolean {
+  return !!email && config.adminEmails.includes(email.trim().toLowerCase());
+}
 
 /** Shape safe to send to clients — never includes secrets (password/TOTP). */
 export type PublicUser = Omit<User, 'passwordHash' | 'totpSecret' | 'totpRecovery'> & {
@@ -73,7 +79,9 @@ export async function createLocal(input: CreateLocalInput, actor: string): Promi
  * Upsert an SSO identity (OIDC or SAML). Keyed on (authProvider, subject) so
  * the same person across providers stays distinct and a renamed username never
  * forks the account. Role/isActive are NOT overwritten on update — admins own
- * those locally even when the IdP is the identity source.
+ * those locally even when the IdP is the identity source — with one exception:
+ * an email in the AUTH_ADMIN_EMAILS allowlist is promoted to admin on every
+ * login (promotion-only; a non-listed user is never demoted here).
  */
 export async function upsertSso(opts: {
   provider: AuthProvider;
@@ -83,12 +91,15 @@ export async function upsertSso(opts: {
   email?: string | null;
   defaultRole?: UserRole;
 }): Promise<User> {
+  const forceAdmin = isAllowlistedAdmin(opts.email);
   return prisma.user.upsert({
     where: { authProvider_subject: { authProvider: opts.provider, subject: opts.subject } },
     update: {
       username: opts.username.trim().toLowerCase(),
       displayName: opts.displayName ?? undefined,
       email: opts.email?.trim().toLowerCase() ?? undefined,
+      // Promote allowlisted admins; leave everyone else's role untouched.
+      role: forceAdmin ? 'admin' : undefined,
       lastSeenAt: new Date(),
     },
     create: {
@@ -97,7 +108,7 @@ export async function upsertSso(opts: {
       username: opts.username.trim().toLowerCase(),
       displayName: opts.displayName ?? opts.username,
       email: opts.email?.trim().toLowerCase() ?? null,
-      role: opts.defaultRole ?? 'technician',
+      role: forceAdmin ? 'admin' : opts.defaultRole ?? 'technician',
       lastSeenAt: new Date(),
     },
   });

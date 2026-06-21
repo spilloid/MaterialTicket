@@ -63,9 +63,15 @@ describe('ticket-number subject tags', () => {
     expect(tagSubjectWithTicket('[#10042] Printer is offline', '10042')).toBe('[#10042] Printer is offline');
   });
 
-  it('extracts bracketed and bare ticket numbers from replies', () => {
+  it('extracts the bracketed ticket number from replies', () => {
     expect(ticketNumberFromSubject('Re: [#10042] Printer is offline')).toBe('10042');
-    expect(ticketNumberFromSubject('Re: ticket #10042')).toBe('10042');
+  });
+
+  it('ignores bare #NNNNN tokens so unrelated subjects do not mis-thread', () => {
+    // Only the bracketed tag we control re-threads; bare numbers (invoices, POs)
+    // must never re-attach a new email onto an existing ticket.
+    expect(ticketNumberFromSubject('Re: ticket #10042')).toBeNull();
+    expect(ticketNumberFromSubject('Invoice #10042 is overdue')).toBeNull();
   });
 
   it('ignores subjects without a supported ticket number', () => {
