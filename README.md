@@ -24,7 +24,7 @@ What sets it apart from a plain helpdesk: each ticket can become an operations c
 
 ## What ships in v1.8.0
 
-- **✉️ Multi-identity email** — send as shared boxes (help@, support@) or a personal alias on your SMTP domain, with **Cc/Bcc**, contact **autocomplete**, per-tech **signatures**, and reusable **boilerplate templates**. The From header uses the chosen identity while the SMTP envelope stays your relay so SPF/DKIM still pass.
+- **✉️ Multi-identity email** — send as shared boxes (help@, support@) or a personal alias on your SMTP domain, with **Cc/Bcc**, contact **autocomplete**, per-tech **signatures**, reusable **boilerplate templates**, and paste/drop **inline images**. The From header uses the chosen identity while the SMTP envelope stays your relay so SPF/DKIM still pass. <sub>(Your relay must allow sending as the chosen From address — normal for same-domain aliases; if it enforces sender = auth-user it will reject and AnchorDesk surfaces a clear error.)</sub>
 - **🏷️ Labels & mailbox tagging** — managed, colored labels on tickets; each IMAP mailbox can auto-apply a label so catchall vs help@ vs a personal inbox arrive tagged differently.
 - **🖼️ Inline images** — images in emails and internal notes render inline (lazy-loaded, never overflowing the timeline); inbound inline images are captured as attachments.
 - **🧾 Script logs on the ticket** — RMM script runs append their output to the ticket timeline (live).
