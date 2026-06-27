@@ -181,6 +181,31 @@ function rewriteCidRefs(html: string, stored: StoredAttachment[]): string {
   return out;
 }
 
+/**
+ * Turn an ImapFlow error into something actionable. ImapFlow's `.message` for a
+ * rejected command is just "Command failed" — the real reason lives in
+ * `.responseText` / `.serverResponseCode` / `.authenticationFailed`. Surfacing
+ * those is the difference between "Command failed" and "Authentication failed —
+ * check the app-specific password / IMAP access" in the mailbox's last error.
+ */
+function describeImapError(err: unknown): string {
+  const e = err as {
+    message?: string;
+    responseText?: string;
+    serverResponseCode?: string;
+    authenticationFailed?: boolean;
+    code?: string;
+  };
+  const parts: string[] = [];
+  if (e.authenticationFailed) parts.push('Authentication failed');
+  if (e.responseText) parts.push(e.responseText);
+  else if (e.message) parts.push(e.message);
+  if (e.serverResponseCode) parts.push(`[${e.serverResponseCode}]`);
+  else if (e.code && e.code !== e.serverResponseCode) parts.push(`[${e.code}]`);
+  const msg = parts.join(' ').trim();
+  return msg || 'Unknown IMAP error';
+}
+
 /** Poll one mailbox for new mail. Connection errors are captured, not thrown. */
 export async function pollMailbox(mb: Mailbox): Promise<PollResult> {
   const result: PollResult = { mailbox: mb.name, processed: 0, created: 0, appended: 0 };
@@ -223,7 +248,7 @@ export async function pollMailbox(mb: Mailbox): Promise<PollResult> {
     await client.logout();
     await mailboxRepo.recordPoll(mb.id, highest, null);
   } catch (err) {
-    result.error = (err as Error).message;
+    result.error = describeImapError(err);
     await mailboxRepo.recordPoll(mb.id, highest > (mb.lastUid ?? 0) ? highest : undefined, result.error);
     try {
       await client.close();
