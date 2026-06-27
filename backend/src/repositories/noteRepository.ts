@@ -37,6 +37,28 @@ export async function timeTotalForTicket(ticketId: number): Promise<number> {
   return r._sum.minutes ?? 0;
 }
 
+/**
+ * A user's time entries that fall within [from, to) — the data behind the "My
+ * Day" spread. An entry's position on the day is its `timeStart` when it has a
+ * logged window; duration-only entries (no window) are anchored by `createdAt`
+ * so they still count toward the day even though they can't be placed on the
+ * clock. The ticket is included so each block can label which ticket it's for.
+ */
+export function listTimeEntriesForUser(userId: number, from: Date, to: Date) {
+  return prisma.note.findMany({
+    where: {
+      authorId: userId,
+      noteType: 'time_entry',
+      OR: [
+        { timeStart: { gte: from, lt: to } },
+        { timeStart: null, createdAt: { gte: from, lt: to } },
+      ],
+    },
+    orderBy: [{ timeStart: 'asc' }, { createdAt: 'asc' }],
+    include: { ticket: { select: { id: true, ticketNumber: true, title: true } } },
+  });
+}
+
 export async function listForTicket(ticketId: number) {
   return prisma.note.findMany({
     where: { ticketId },
