@@ -17,8 +17,9 @@ import SyncIcon from "@mui/icons-material/Sync";
 import SettingsIcon from "@mui/icons-material/Settings";
 import AnchorIcon from "@mui/icons-material/Anchor";
 import BusinessIcon from "@mui/icons-material/Business";
+import ViewTimelineIcon from "@mui/icons-material/ViewTimeline";
 
-type ViewMode = "cards" | "table" | "kanban" | "sync" | "admin" | "network" | "companies";
+type ViewMode = "cards" | "table" | "kanban" | "sync" | "admin" | "network" | "companies" | "myday";
 
 interface DashboardDrawerProps {
   drawerOpen: boolean;
@@ -38,6 +39,10 @@ const TICKET_NAV: NavItem[] = [
   { mode: "cards", label: "Cards", icon: <ViewModuleIcon /> },
   { mode: "table", label: "Table", icon: <TableRowsIcon /> },
   { mode: "kanban", label: "Board", icon: <ViewKanbanIcon /> },
+];
+
+const TIME_NAV: NavItem[] = [
+  { mode: "myday", label: "My Day", icon: <ViewTimelineIcon /> },
 ];
 
 const OPS_NAV: NavItem[] = [
@@ -82,6 +87,8 @@ export default function DashboardDrawer({ drawerOpen, toggleDrawer, setViewMode,
         <Divider />
 
         {section("Tickets", TICKET_NAV)}
+        <Divider sx={{ mx: 2 }} />
+        {section("Time", TIME_NAV)}
         <Divider sx={{ mx: 2 }} />
         {section("Operations", OPS_NAV)}
 

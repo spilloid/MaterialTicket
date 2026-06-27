@@ -29,6 +29,7 @@ import SyncView from "./components/SyncView";
 import AdminView from "./components/AdminView";
 import NetworkView from "./components/NetworkView";
 import CompaniesView from "./components/CompaniesView";
+import MyDayView from "./components/MyDayView";
 import TicketDialog from "./components/TicketDialog";
 import TicketTable from "./components/TicketTable";
 import KanbanBoard from "./components/KanbanBoard";
@@ -118,7 +119,7 @@ function App() {
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [ticketNotes, setTicketNotes] = useState<Note[]>([]);
-  const [viewMode, setViewMode] = useState<"cards" | "table" | "kanban" | "sync" | "admin" | "network" | "companies">("kanban");
+  const [viewMode, setViewMode] = useState<"cards" | "table" | "kanban" | "sync" | "admin" | "network" | "companies" | "myday">("kanban");
   const [toast, setToast] = useState<{ message: string; severity: "success" | "error" } | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -363,6 +364,8 @@ function App() {
 
           {viewMode === "admin" ? (
             <AdminView />
+          ) : viewMode === "myday" ? (
+            <MyDayView onOpenTicket={openTicketById} />
           ) : viewMode === "network" ? (
             <NetworkView initialCompany={networkCompany} />
           ) : viewMode === "companies" ? (

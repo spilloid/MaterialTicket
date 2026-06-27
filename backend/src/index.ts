@@ -9,6 +9,7 @@ import { attachmentRoutes } from './routes/attachments';
 import { notificationRoutes } from './routes/notifications';
 import { slaRoutes } from './routes/sla';
 import { labelRoutes } from './routes/labels';
+import { timeRoutes } from './routes/time';
 import { wsRoutes } from './routes/ws';
 import { deviceRoutes } from './routes/devices';
 import { probeRoutes } from './routes/probes';
@@ -107,6 +108,8 @@ async function start() {
   server.register(slaRoutes);
   // Labels (managed tags) + ticket tag/untag
   server.register(labelRoutes);
+  // Time / "My Day" — the signed-in user's logged time for a day
+  server.register(timeRoutes);
   // Devices (local-first asset records + ticket linking)
   server.register(deviceRoutes);
   // Probes (netviz scanner registration + inbound device ingest)

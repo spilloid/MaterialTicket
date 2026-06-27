@@ -884,3 +884,39 @@ export function listTicketScriptJobs(ticketId: number) {
 export function getScriptJob(id: number) {
   return request<unknown>(`/script-jobs/${id}`);
 }
+
+// ─── Time / My Day ───────────────────────────────────────────────────────────
+
+export interface MyDayEntry {
+  id: number;
+  ticketId: number;
+  ticketNumber: string | null;
+  ticketTitle: string | null;
+  content: string;
+  minutes: number;
+  timeStart: string | null;
+  timeStop: string | null;
+  /** True when the entry has a start+stop window and can sit on the clock. */
+  placed: boolean;
+}
+
+export interface MyDay {
+  from: string;
+  to: string;
+  entries: MyDayEntry[];
+  summary: {
+    loggedMinutes: number;
+    placedMinutes: number;
+    unplacedMinutes: number;
+    firstStart: string | null;
+    lastStop: string | null;
+    count: number;
+  };
+}
+
+/** The signed-in user's logged time for a single day. `from`/`to` are the
+ *  client's local day bounds so the day matches the tech's timezone. */
+export function getMyDay(from: Date, to: Date) {
+  const params = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
+  return request<MyDay>(`/me/time-entries?${params}`);
+}
